@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 
 const { createServer } = require('node:http');
-const fs = require('node:fs/promises');
-const path = require('node:path');
 const { URL } = require('node:url');
+const { validateAudioPath } = require('./lib/audioInput');
 const { createJobStore } = require('./lib/jobs');
 const { runAnalysis } = require('./lib/pythonRunner');
 const { buildPromptPackage } = require('./lib/promptGenerator');
 
 const DEFAULT_PORT = Number.parseInt(process.env.PROMPT2MIDI_PORT || '47321', 10);
-const MAX_AUDIO_BYTES = 250 * 1024 * 1024;
 
 function createApp(options = {}) {
   const jobs = options.jobs || createJobStore();
@@ -25,7 +23,7 @@ function createApp(options = {}) {
       return sendJson(res, 400, {
         error: {
           code: 'missing_input',
-          message: 'Drop a WAV file or enter a prompt before analyzing.'
+          message: 'Drop a WAV/MP3 file or enter a prompt before analyzing.'
         }
       });
     }
@@ -106,7 +104,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
   try {
     let analysisPayload;
     if (input.audioPath) {
-      jobs.update(jobId, { progress: 35, message: 'Analyzing WAV features.' });
+      jobs.update(jobId, { progress: 35, message: 'Analyzing reference features.' });
       analysisPayload = await analyzer(input.audioPath, jobId);
     } else {
       analysisPayload = {
@@ -128,7 +126,8 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       result: {
         analysis: analysisPayload.analysis,
         interpretation,
-        midi_files: analysisPayload.midi_files || {}
+        midi_files: analysisPayload.midi_files || {},
+        midi_notes: analysisPayload.midi_notes || []
       }
     });
   } catch (error) {
@@ -166,6 +165,7 @@ function promptOnlyAnalysis(prompt) {
       zero_crossing_rate: null,
       peak_amplitude: null
     },
+    bpm_confidence: bpmMatch ? 0.65 : 0.15,
     warnings: ['Prompt-only mode uses inferred defaults until generated audio or a reference track is provided.']
   };
 }
@@ -179,33 +179,6 @@ function normalizeError(error) {
 
 function jobNotFound() {
   return { error: { code: 'job_not_found', message: 'No job exists for that id.' } };
-}
-
-async function validateAudioPath(audioPath) {
-  if (!path.isAbsolute(audioPath)) {
-    return { code: 'invalid_audio_path', message: 'Audio path must be absolute.' };
-  }
-
-  if (!['.wav', '.wave'].includes(path.extname(audioPath).toLowerCase())) {
-    return { code: 'unsupported_format', message: 'Phase 1 supports uncompressed PCM WAV files.' };
-  }
-
-  let stat;
-  try {
-    stat = await fs.stat(audioPath);
-  } catch {
-    return { code: 'audio_not_found', message: 'Audio file does not exist.' };
-  }
-
-  if (!stat.isFile()) {
-    return { code: 'invalid_audio_path', message: 'Audio path must point to a file.' };
-  }
-
-  if (stat.size > MAX_AUDIO_BYTES) {
-    return { code: 'audio_too_large', message: 'Audio file exceeds the Phase 1 size limit.' };
-  }
-
-  return null;
 }
 
 function readJsonBody(req) {

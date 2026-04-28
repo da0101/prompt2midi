@@ -18,7 +18,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 
 - Source files currently live in `Source/PluginProcessor.*`, `Source/PluginEditor.*`, `Source/LocalApiClient.h`, and `Source/ModernTheme.h`.
 - `Prompt2midiAudioProcessor` is intentionally pass-through audio processing for the MVP.
-- `Prompt2midiAudioProcessorEditor` owns WAV choose/drop, prompt input, async local API polling, result display, and copy prompt.
+- `Prompt2midiAudioProcessorEditor` owns WAV/MP3 choose/drop, prompt input, async local API polling, result display, and copy prompt.
 - The plugin should call a local API for long-running work rather than doing analysis inside the plugin.
 - Keep host/audio-thread stability as the primary invariant.
 

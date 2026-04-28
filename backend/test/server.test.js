@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { describe, it } = require('node:test');
+const { findFfmpeg } = require('../lib/audioInput');
 const { createApp, promptOnlyAnalysis } = require('../server');
 
 describe('prompt2midi local API', () => {
@@ -86,8 +88,41 @@ describe('prompt2midi local API', () => {
       const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
       assert.equal(result.statusCode, 200);
       assert.ok(result.body.result.analysis.bpm);
-      assert.ok(result.body.result.midi_files.bass.endsWith('bassline.mid'));
-      assert.ok(fs.existsSync(result.body.result.midi_files.bass));
+      assert.ok(result.body.result.analysis.bpm_confidence > 0);
+      assert.ok(result.body.result.midi_files.reference_sketch.endsWith('reference-sketch.mid'));
+      assert.ok(fs.existsSync(result.body.result.midi_files.reference_sketch));
+      assert.match(result.body.result.midi_notes[0], /not source-track transcription/i);
+    } finally {
+      await close(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('decodes MP3 through ffmpeg before running analysis when available', async (t) => {
+    const ffmpeg = await findFfmpeg();
+    if (!ffmpeg) {
+      t.skip('ffmpeg is not installed');
+      return;
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt2midi-api-'));
+    const wavPath = path.join(tempDir, 'pulse.wav');
+    const mp3Path = path.join(tempDir, 'pulse.mp3');
+    writePulseWav(wavPath, 120);
+    const convert = spawnSync(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-i', wavPath, mp3Path]);
+    assert.equal(convert.status, 0, convert.stderr.toString());
+
+    const server = await listen(createApp());
+    try {
+      const start = await request(server, 'POST', '/analyze', { audioPath: mp3Path });
+      assert.equal(start.statusCode, 202);
+      await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+
+      const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
+      assert.equal(result.statusCode, 200);
+      assert.equal(result.body.result.analysis.original_source_path, mp3Path);
+      assert.ok(result.body.result.analysis.decoded_source_path.endsWith('decoded-input.wav'));
+      assert.ok(result.body.result.analysis.warnings.some((warning) => warning.includes('ffmpeg')));
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -99,6 +134,7 @@ describe('prompt-only analysis', () => {
   it('extracts bpm and key when present', () => {
     const analysis = promptOnlyAnalysis('uplifting 132 BPM in F# minor');
     assert.equal(analysis.bpm, 132);
+    assert.ok(analysis.bpm_confidence > 0);
     assert.equal(analysis.key, 'F# minor');
   });
 });

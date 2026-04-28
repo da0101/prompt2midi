@@ -9,20 +9,23 @@ import os
 import sys
 
 from feature_extraction import AnalysisError, analyze_wav
-from midi_extraction import write_bassline_midi
+from midi_extraction import write_reference_sketch_midi
 
 
 def run(audio_path: str, output_dir: str) -> dict:
     analysis = analyze_wav(audio_path)
-    midi_path = write_bassline_midi(
-        os.path.join(output_dir, "bassline.mid"),
+    midi_path = write_reference_sketch_midi(
+        os.path.join(output_dir, "reference-sketch.mid"),
         key=analysis.get("key") or "C major",
         bpm=analysis.get("bpm") or 120.0,
     )
     return {
         "ok": True,
         "analysis": analysis,
-        "midi_files": {"bass": midi_path},
+        "midi_files": {"reference_sketch": midi_path},
+        "midi_notes": [
+            "Generated from estimated BPM/key only. This is a producer sketch, not source-track transcription."
+        ],
     }
 
 

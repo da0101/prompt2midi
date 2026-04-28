@@ -22,4 +22,6 @@ The backend listens on `http://127.0.0.1:47321` and exposes:
 - `GET /status?id=<job_id>`
 - `GET /result?id=<job_id>`
 
-Phase 1 supports prompt-only jobs and uncompressed PCM WAV analysis. MP3/stem extraction requires a decoder/model dependency decision.
+Phase 2 accepts prompt-only jobs plus WAV/WAVE and MP3 references. MP3 input is decoded locally with `ffmpeg` before the Python WAV analyzer runs.
+
+MIDI output is currently a `reference-sketch.mid` generated from estimated BPM/key only. It is not source-track transcription.

@@ -20,7 +20,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
   - `POST /analyze`
   - `GET /status`
   - `GET /result`
-- Node owns job queue/state, Python process invocation, deterministic prompt generation, and result aggregation.
+- Node owns job queue/state, MP3/WAV boundary validation, FFmpeg MP3 decoding, Python process invocation, deterministic prompt generation, and result aggregation.
 - WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 
@@ -42,6 +42,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - `promt.md`
 - `package.json`
 - `backend/server.js`
+- `backend/lib/audioInput.js`
 - `backend/lib/jobs.js`
 - `backend/lib/pythonRunner.js`
 - `backend/lib/promptGenerator.js`

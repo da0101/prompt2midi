@@ -17,7 +17,8 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 ## Backend / source of truth
 
 - Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, and `analysis/midi_extraction.py`.
-- Phase 1 output: BPM, rough key estimate, energy curve, loudness, spectral features, and a simple MIDI sketch path.
+- Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, and a `reference-sketch.mid` path.
+- Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
 - Later phases: section segmentation, stem/instrument analysis, chord progression, melody/bass MIDI extraction.
 - Python should return structured JSON only; interpretation/prose belongs to Node/LLM.
 
@@ -30,9 +31,12 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 - Phase 1 JSON shape starts with:
   - `bpm: number`
+  - `bpm_confidence: number`
   - `key: string`
+  - `key_confidence: number`
   - `energy_curve: array`
   - `loudness: number`
+  - `warnings: array`
 - Future analysis data should extend the contract without breaking existing UI fields.
 - Errors must be structured enough for the plugin to show actionable states.
 

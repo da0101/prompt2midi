@@ -1,13 +1,22 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { prepareAudioForAnalysis } = require('./audioInput');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const analysisScript = path.join(repoRoot, 'analysis', 'analyze.py');
 const outputRoot = path.join(repoRoot, 'tmp', 'jobs');
 
-function runAnalysis(audioPath, jobId) {
+async function runAnalysis(audioPath, jobId) {
+  const outputDir = path.join(outputRoot, jobId);
+  const prepared = await prepareAudioForAnalysis(audioPath, outputDir);
+  return runPythonAnalysis(prepared.analysisPath, outputDir, {
+    originalPath: audioPath,
+    warnings: prepared.warnings
+  });
+}
+
+function runPythonAnalysis(audioPath, outputDir, inputInfo) {
   return new Promise((resolve, reject) => {
-    const outputDir = path.join(outputRoot, jobId);
     const child = spawn('python3', [analysisScript, '--audio', audioPath, '--output-dir', outputDir], {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -44,9 +53,19 @@ function runAnalysis(audioPath, jobId) {
         });
       }
 
+      const analysis = payload.analysis || {};
+      if (inputInfo.originalPath && inputInfo.originalPath !== audioPath) {
+        analysis.original_source_path = inputInfo.originalPath;
+        analysis.decoded_source_path = audioPath;
+      }
+      if (inputInfo.warnings && inputInfo.warnings.length > 0) {
+        analysis.warnings = [...(analysis.warnings || []), ...inputInfo.warnings];
+      }
+
       resolve({
-        analysis: payload.analysis,
-        midi_files: payload.midi_files || {}
+        analysis,
+        midi_files: payload.midi_files || {},
+        midi_notes: payload.midi_notes || []
       });
     });
   });

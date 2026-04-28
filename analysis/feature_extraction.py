@@ -107,15 +107,18 @@ def analyze_wav(path: str) -> dict:
     audio = read_wav_mono(path)
     energy_curve = compute_energy_curve(audio.samples, audio.sample_rate)
     loudness = compute_loudness_dbfs(audio.samples)
-    bpm = estimate_bpm(energy_curve)
+    tempo = estimate_tempo(energy_curve)
     key = estimate_key(audio.samples, audio.sample_rate)
+    warnings = key["warnings"] + tempo["warnings"]
+    warnings.append("Phase 2 analysis is reference-level only; generated MIDI is not source-track transcription.")
 
     return {
         "source_path": os.path.abspath(path),
         "duration_seconds": round(audio.duration_seconds, 3),
         "sample_rate": audio.sample_rate,
         "channels": audio.channels,
-        "bpm": bpm,
+        "bpm": tempo["bpm"],
+        "bpm_confidence": tempo["confidence"],
         "key": key["key"],
         "key_confidence": key["confidence"],
         "energy_curve": energy_curve,
@@ -124,7 +127,7 @@ def analyze_wav(path: str) -> dict:
             "zero_crossing_rate": round(zero_crossing_rate(audio.samples), 5),
             "peak_amplitude": round(max(abs(sample) for sample in audio.samples), 5),
         },
-        "warnings": key["warnings"],
+        "warnings": warnings,
     }
 
 
@@ -147,32 +150,44 @@ def compute_loudness_dbfs(samples: list[float]) -> float:
     return round(20.0 * math.log10(rms), 2)
 
 
-def estimate_bpm(energy_curve: list[dict]) -> float | None:
+def estimate_tempo(energy_curve: list[dict]) -> dict:
     if len(energy_curve) < 8:
-        return None
+        return {"bpm": None, "confidence": 0.0, "warnings": ["BPM estimate unavailable for short audio."]}
 
     energies = [point["energy"] for point in energy_curve]
     mean_energy = sum(energies) / len(energies)
     flux = [max(0.0, energies[index] - energies[index - 1]) for index in range(1, len(energies))]
     if max(flux, default=0.0) <= 0.00001:
-        return None
+        return {"bpm": None, "confidence": 0.0, "warnings": ["BPM estimate unavailable for low-dynamics audio."]}
 
     step_seconds = max(0.001, energy_curve[1]["time"] - energy_curve[0]["time"])
     best_lag = None
     best_score = 0.0
+    total_score = 0.0
     for bpm in range(60, 181):
         lag = max(1, round((60.0 / bpm) / step_seconds))
         if lag >= len(flux):
             continue
         score = sum(flux[index] * flux[index - lag] for index in range(lag, len(flux)))
         score *= 1.0 + min(0.25, max(0.0, mean_energy))
+        total_score += score
         if score > best_score:
             best_lag = lag
             best_score = score
 
     if best_lag is None:
-        return None
-    return round(60.0 / (best_lag * step_seconds), 2)
+        return {"bpm": None, "confidence": 0.0, "warnings": ["BPM estimate unavailable for this reference."]}
+
+    confidence = 0.0 if total_score <= 0.0 else min(0.72, max(0.2, best_score / total_score * 8.0))
+    return {
+        "bpm": round(60.0 / (best_lag * step_seconds), 2),
+        "confidence": round(confidence, 2),
+        "warnings": ["BPM estimate uses simple onset autocorrelation and should be treated as approximate."],
+    }
+
+
+def estimate_bpm(energy_curve: list[dict]) -> float | None:
+    return estimate_tempo(energy_curve)["bpm"]
 
 
 def estimate_key(samples: list[float], sample_rate: int) -> dict:

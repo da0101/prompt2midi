@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small MIDI writer used by the first local vertical slice."""
+"""Small MIDI sketch writer used by the local analysis pipeline."""
 
 from __future__ import annotations
 
@@ -24,7 +24,8 @@ NOTE_TO_MIDI = {
 }
 
 
-def write_bassline_midi(path: str, key: str = "C major", bpm: float = 120.0, bars: int = 4) -> str:
+def write_reference_sketch_midi(path: str, key: str = "C major", bpm: float = 120.0, bars: int = 4) -> str:
+    """Write a generated reference sketch, not a transcription of the source."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     root = key.split()[0] if key else "C"
     note = NOTE_TO_MIDI.get(root, 48)
@@ -70,12 +71,12 @@ def _varlen(value: int) -> bytes:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Write a simple bassline MIDI file.")
+    parser = argparse.ArgumentParser(description="Write a simple reference-sketch MIDI file.")
     parser.add_argument("output_path")
     parser.add_argument("--key", default="C major")
     parser.add_argument("--bpm", type=float, default=120.0)
     args = parser.parse_args()
-    print(write_bassline_midi(args.output_path, key=args.key, bpm=args.bpm))
+    print(write_reference_sketch_midi(args.output_path, key=args.key, bpm=args.bpm))
     return 0
 
 

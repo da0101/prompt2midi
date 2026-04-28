@@ -1,6 +1,6 @@
 # Local Backend
 
-The vertical-slice backend is dependency-free Node.js plus Python stdlib analysis.
+The local backend uses Node.js orchestration, Python stdlib WAV analysis, and optional `ffmpeg` decoding for MP3 input.
 
 ## Run
 
@@ -30,4 +30,9 @@ http://127.0.0.1:47321
 }
 ```
 
-Phase 1 supports uncompressed PCM WAV files. MP3 support is intentionally not guessed in this slice because it needs a decoder dependency decision.
+Supported reference files:
+
+- `.wav` / `.wave` PCM files
+- `.mp3` files when `ffmpeg` is on `PATH` or `PROMPT2MIDI_FFMPEG` points to the binary
+
+MP3 files are decoded into `tmp/jobs/<job_id>/decoded-input.wav` before Python analysis. MIDI output is named `reference-sketch.mid` because it is generated from estimated BPM/key and is not transcription.

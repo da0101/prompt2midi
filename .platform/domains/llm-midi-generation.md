@@ -18,7 +18,7 @@ This domain covers turning structured musical analysis and user prompts into pro
 
 - MVP prompt generation is deterministic Node code that takes structured JSON from Python via Node.
 - It returns producer insights and AI-generation prompts.
-- MVP MIDI generation writes a simple local `bassline.mid`; real melody/chord/bass transcription is deferred.
+- MVP MIDI generation writes a simple local `reference-sketch.mid`; real melody/chord/bass transcription is deferred.
 - Prompting should be deterministic and based on structured inputs, not vague free text.
 
 ## Frontend / clients
@@ -33,7 +33,8 @@ This domain covers turning structured musical analysis and user prompts into pro
   - human-readable producer explanation
   - genre/style breakdown
   - AI-generation prompt
-- MIDI output should include named asset paths such as bass, melody, or chords when available.
+- MIDI output must not be presented as transcription unless the extraction engine actually supports it.
+- Current MIDI output includes `reference_sketch` plus notes explaining that it is generated from estimated BPM/key.
 - The local workflow cannot require external AI APIs.
 
 ## Key files

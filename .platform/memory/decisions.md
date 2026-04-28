@@ -25,6 +25,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 4 | 2026-04-28 | Local-first constraint | Core workflow must run locally and must not require cloud APIs. | `promt.md` lists local-first/no cloud dependency as hard constraints. | Making OpenAI/ChatGPT API calls mandatory for the main path. |
 | 5 | 2026-04-28 | Threading boundary | Heavy work must stay out of JUCE `processBlock` and the audio thread. | Ableton plugin stability depends on non-blocking processing. | Running analysis, HTTP, subprocesses, or file-heavy logic in audio callbacks. |
 | 6 | 2026-04-28 | First backend slice | Use dependency-free Node stdlib HTTP/job orchestration and Python stdlib WAV analysis for the first vertical slice. | It proves the end-to-end contract immediately and keeps FastAPI/MP3/model choices reversible. | Introducing framework and decoder dependencies before the API and result contract are stable. |
+| 7 | 2026-04-28 | MP3 input | Use FFmpeg as the MP3 boundary adapter and keep Python analysis WAV-only. | FFmpeg handles decoding locally without forcing Python audio dependencies into the analysis core. | Requiring users to pre-convert MP3s; adding a Python decoder dependency before deeper analysis is designed. |
 
 ---
 

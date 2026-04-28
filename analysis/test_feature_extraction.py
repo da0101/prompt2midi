@@ -9,7 +9,7 @@ import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
 from feature_extraction import analyze_wav
-from midi_extraction import write_bassline_midi
+from midi_extraction import write_reference_sketch_midi
 
 
 class FeatureExtractionTest(unittest.TestCase):
@@ -24,14 +24,18 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertGreater(result["duration_seconds"], 3.9)
         self.assertIsNotNone(result["bpm"])
         self.assertAlmostEqual(result["bpm"], 120, delta=1)
+        self.assertIn("bpm_confidence", result)
+        self.assertGreater(result["bpm_confidence"], 0)
         self.assertIn("key", result)
+        self.assertIn("key_confidence", result)
         self.assertGreater(len(result["energy_curve"]), 2)
         self.assertIn("loudness", result)
+        self.assertTrue(any("not source-track transcription" in warning for warning in result["warnings"]))
 
-    def test_write_bassline_midi_creates_standard_midi_file(self):
+    def test_write_reference_sketch_midi_creates_standard_midi_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            midi_path = os.path.join(temp_dir, "bassline.mid")
-            written = write_bassline_midi(midi_path, key="A major", bpm=124)
+            midi_path = os.path.join(temp_dir, "reference-sketch.mid")
+            written = write_reference_sketch_midi(midi_path, key="A major", bpm=124)
 
             with open(written, "rb") as midi_file:
                 header = midi_file.read(4)

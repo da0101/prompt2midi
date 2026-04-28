@@ -11,10 +11,10 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 | Area | Status | Last touched | Notes |
 |---|---|---|---|
 | JUCE plugin shell | 🔵 Exists | 2026-04-28 | Editor now has file choose/drop, prompt input, async local API polling, result display, and copy prompt. JUCE is installed at `/Applications/JUCE`; Projucer regenerated the Xcode project and Debug builds pass. |
-| Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV paths; backend accepts `audioPath` and prompt. MP3 not implemented yet. |
-| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free Phase 1 PCM WAV analyzer returns BPM, key estimate, energy curve, loudness, and spectral basics. |
+| Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV/WAVE/MP3 paths; backend decodes MP3 locally with FFmpeg before Python WAV analysis. |
+| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free PCM WAV analyzer returns BPM/key estimates with confidence, energy curve, loudness, spectral basics, and warnings. |
 | Node orchestrator | 🔵 Exists | 2026-04-28 | Local stdlib Node API has `/analyze`, `/status`, `/result`, job state, Python bridge, and prompt package generation. |
-| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes a simple bassline MIDI sketch for WAV jobs. Full melody/chord extraction remains pending. |
+| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid` from estimated BPM/key and labels it as a generated sketch, not transcription. Full melody/chord extraction remains pending. |
 | Local LLM interpretation | 🔵 Exists | 2026-04-28 | Deterministic local prompt generator turns structured analysis into producer summary and AI music prompt. Real local model runtime remains deferred. |
 | Ableton UX | 🔵 Exists | 2026-04-28 | Functional MVP UI exists and builds as standalone/AU/VST3. It is accepted as temporary; full UI polish and in-host Ableton verification remain follow-ups. |
 
@@ -27,9 +27,9 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 ## Immediate priorities
 
-1. **Commit and close vertical-slice MVP** — automated tests/build are green and the temporary UI is accepted.
-2. **Open the next stream for audio intelligence** — improve transcription quality beyond placeholder MIDI sketches.
-3. **Choose next dependency path** — decide MP3 decoder, local LLM runtime, and whether Node remains the orchestrator for cloud mode or gets replaced by FastAPI.
+1. **Decide whether to close audio-intelligence-v1** — MP3 support, confidence metadata, and honest MIDI sketch labeling are implemented and verified.
+2. **Plan deeper transcription** — next meaningful leap is real bass/chord/melody extraction rather than generated sketches.
+3. **Choose local LLM runtime** — deterministic prompt generation still needs replacement with the selected local model path.
 
 ## Open decisions
 

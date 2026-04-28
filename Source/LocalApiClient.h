@@ -65,25 +65,38 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     auto analysis = resultObject->getProperty ("analysis");
     auto interpretation = resultObject->getProperty ("interpretation");
     auto midiFiles = resultObject->getProperty ("midi_files");
+    auto midiNotes = resultObject->getProperty ("midi_notes");
 
     auto bpm = propertyString (analysis, "bpm");
     auto key = propertyString (analysis, "key");
     auto loudness = propertyString (analysis, "loudness");
+    auto bpmConfidence = propertyString (analysis, "bpm_confidence");
+    auto keyConfidence = propertyString (analysis, "key_confidence");
     auto summary = propertyString (interpretation, "producer_summary");
     promptForClipboard = propertyString (interpretation, "ai_music_prompt");
 
     juce::String output;
     output << "BPM: " << (bpm.isNotEmpty() ? bpm : "unknown") << "\n";
+    if (bpmConfidence.isNotEmpty())
+        output << "BPM confidence: " << bpmConfidence << "\n";
     output << "Key: " << (key.isNotEmpty() ? key : "unknown") << "\n";
+    if (keyConfidence.isNotEmpty())
+        output << "Key confidence: " << keyConfidence << "\n";
     output << "Loudness: " << (loudness.isNotEmpty() ? loudness + " dBFS" : "unknown") << "\n\n";
     output << "Producer insight:\n" << summary << "\n\n";
     output << "AI music prompt:\n" << promptForClipboard << "\n\n";
 
     if (auto* midiObject = midiFiles.getDynamicObject())
     {
-        auto bassPath = midiObject->getProperty ("bass").toString();
-        if (bassPath.isNotEmpty())
-            output << "MIDI bassline:\n" << bassPath << "\n";
+        auto sketchPath = midiObject->getProperty ("reference_sketch").toString();
+        if (sketchPath.isNotEmpty())
+            output << "MIDI reference sketch (not transcription):\n" << sketchPath << "\n";
+    }
+
+    if (auto* notes = midiNotes.getArray())
+    {
+        for (const auto& note : *notes)
+            output << "\nNote: " << note.toString();
     }
 
     return output;

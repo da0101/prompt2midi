@@ -1,6 +1,8 @@
 function buildPromptPackage({ prompt = '', analysis }) {
   const bpm = analysis.bpm || 120;
   const key = analysis.key || 'C major';
+  const bpmConfidence = confidencePhrase(analysis.bpm_confidence);
+  const keyConfidence = confidencePhrase(analysis.key_confidence);
   const energy = summarizeEnergy(analysis.energy_curve || []);
   const userIntent = prompt.trim() || 'reference-track inspired production';
 
@@ -13,15 +15,23 @@ function buildPromptPackage({ prompt = '', analysis }) {
   ].filter(Boolean).join(', ');
 
   return {
-    producer_summary: `Detected ${Math.round(bpm)} BPM in ${key}. The energy profile ${energy.summary}. Use this as the production anchor before deeper stem, chord, or section extraction.`,
+    producer_summary: `Estimated ${Math.round(bpm)} BPM (${bpmConfidence}) in ${key} (${keyConfidence}). The energy profile ${energy.summary}. Treat MIDI output as a generated sketch until deeper stem, chord, or section extraction exists.`,
     style_tags: styleTags,
     ai_music_prompt: aiPrompt,
     next_steps: [
-      'Export the bass MIDI sketch into Ableton.',
+      'Use the MIDI sketch as a starting idea, not a transcription.',
       'Use the generated prompt as a starting point for AI music generation.',
       'Run a deeper pass once section and stem analysis are implemented.'
     ]
   };
+}
+
+function confidencePhrase(value) {
+  const confidence = Number(value) || 0;
+  if (confidence >= 0.7) return 'higher confidence';
+  if (confidence >= 0.4) return 'medium confidence';
+  if (confidence > 0) return 'low confidence';
+  return 'unavailable confidence';
 }
 
 function summarizeEnergy(curve) {
@@ -60,4 +70,4 @@ function inferStyleTags(prompt, energy) {
   return tags.slice(0, 4);
 }
 
-module.exports = { buildPromptPackage, summarizeEnergy, inferStyleTags };
+module.exports = { buildPromptPackage, confidencePhrase, summarizeEnergy, inferStyleTags };

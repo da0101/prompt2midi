@@ -26,11 +26,11 @@ void Prompt2midiAudioProcessorEditor::configureInterface()
     fileCaptionLabel.setFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")));
     addAndMakeVisible (fileCaptionLabel);
 
-    fileLabel.setText ("Drop a WAV reference, choose one, or run prompt-only mode.", juce::dontSendNotification);
+    fileLabel.setText ("Drop a WAV/MP3 reference, choose one, or run prompt-only mode.", juce::dontSendNotification);
     fileLabel.setFont (juce::Font (juce::FontOptions (16.0f).withStyle ("Bold")));
     fileLabel.setColour (juce::Label::textColourId, prompt2midi::theme::text);
     addAndMakeVisible (fileLabel);
-    chooseFileButton.setButtonText ("Choose WAV");
+    chooseFileButton.setButtonText ("Choose Audio");
     prompt2midi::theme::styleActionButton (chooseFileButton, false);
     chooseFileButton.onClick = [this] { chooseAudioFile(); };
     addAndMakeVisible (chooseFileButton);
@@ -150,7 +150,7 @@ bool Prompt2midiAudioProcessorEditor::isInterestedInFileDrag (const juce::String
     for (const auto& path : files)
     {
         auto file = juce::File (path);
-        if (file.hasFileExtension ("wav;wave"))
+        if (file.hasFileExtension ("wav;wave;mp3"))
             return true;
     }
 
@@ -162,7 +162,7 @@ void Prompt2midiAudioProcessorEditor::filesDropped (const juce::StringArray& fil
     for (const auto& path : files)
     {
         auto file = juce::File (path);
-        if (file.hasFileExtension ("wav;wave"))
+        if (file.hasFileExtension ("wav;wave;mp3"))
         {
             selectedAudioFile = file;
             fileLabel.setText ("Reference loaded: " + file.getFileName(), juce::dontSendNotification);
@@ -174,7 +174,7 @@ void Prompt2midiAudioProcessorEditor::filesDropped (const juce::StringArray& fil
 
 void Prompt2midiAudioProcessorEditor::chooseAudioFile()
 {
-    fileChooser = std::make_unique<juce::FileChooser> ("Choose a WAV file to analyze", juce::File{}, "*.wav;*.wave");
+    fileChooser = std::make_unique<juce::FileChooser> ("Choose an audio file to analyze", juce::File{}, "*.wav;*.wave;*.mp3");
     fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this] (const juce::FileChooser& chooser)
                               {
