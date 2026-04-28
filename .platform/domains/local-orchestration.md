@@ -16,12 +16,12 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 
 ## Backend / source of truth
 
-- Planned REST endpoints from `promt.md`:
+- Implemented REST endpoints from `promt.md`:
   - `POST /analyze`
   - `GET /status`
   - `GET /result`
-- Planned WebSocket or equivalent progress updates.
-- Node owns job queue/state, Python process invocation, LLM calls, and result aggregation.
+- Node owns job queue/state, Python process invocation, deterministic prompt generation, and result aggregation.
+- WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 
 ## Frontend / clients
@@ -40,10 +40,14 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 ## Key files
 
 - `promt.md`
-- Planned: Node API entrypoint
-- Planned: job queue/service module
-- Planned: Python runner bridge
-- Planned: LLM prompt service
+- `package.json`
+- `backend/server.js`
+- `backend/lib/jobs.js`
+- `backend/lib/pythonRunner.js`
+- `backend/lib/promptGenerator.js`
+- `backend/test/server.test.js`
+- `docs/local-backend.md`
+- `docs/manual-verification.md`
 
 ## Decisions locked
 

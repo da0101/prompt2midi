@@ -16,9 +16,9 @@ This domain covers turning structured musical analysis and user prompts into pro
 
 ## Backend / source of truth
 
-- Local LLM layer takes structured JSON from Python via Node.
-- It returns producer insights, genre/style breakdowns, and AI-generation prompts.
-- MIDI extraction/generation should produce local `.mid` paths consumable in Ableton.
+- MVP prompt generation is deterministic Node code that takes structured JSON from Python via Node.
+- It returns producer insights and AI-generation prompts.
+- MVP MIDI generation writes a simple local `bassline.mid`; real melody/chord/bass transcription is deferred.
 - Prompting should be deterministic and based on structured inputs, not vague free text.
 
 ## Frontend / clients
@@ -39,9 +39,11 @@ This domain covers turning structured musical analysis and user prompts into pro
 ## Key files
 
 - `promt.md`
-- Planned: LLM prompt templates/service
-- Planned: MIDI export module
-- Planned: result schema shared with JUCE
+- `backend/lib/promptGenerator.js`
+- `analysis/midi_extraction.py`
+- `Source/LocalApiClient.h`
+- Planned: local LLM runtime integration
+- Planned: real MIDI extraction modules
 
 ## Decisions locked
 

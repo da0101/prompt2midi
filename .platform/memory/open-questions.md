@@ -8,6 +8,9 @@ _Live hypotheses and unresolved questions. Appended during `ab close <slug>` whe
 
 <!-- agentboard:open-questions:active:begin -->
 <!-- Format: `- YYYY-MM-DD — [domain] question (context)` -->
+- 2026-04-28 — [audio-analysis] Which MP3/audio decoder dependency should be adopted for Phase 2 import support?
+- 2026-04-28 — [llm-midi-generation] Which local LLM runtime/model should replace the deterministic MVP prompt generator first?
+- 2026-04-28 — [local-orchestration] Should cloud deployment keep Node as the orchestration gateway or introduce FastAPI as the public API layer?
 <!-- agentboard:open-questions:active:end -->
 
 ## Resolved
