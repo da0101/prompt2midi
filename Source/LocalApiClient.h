@@ -70,6 +70,67 @@ inline void appendStringArray (juce::String& output, const juce::var& value, con
             output << prefix << item.toString() << "\n";
 }
 
+inline juce::String eventPrefix (const juce::String& type)
+{
+    if (type == "done" || type == "complete")
+        return "DONE";
+    if (type == "stage")
+        return "STEP";
+    if (type == "warning")
+        return "WARN";
+    if (type == "failed")
+        return "FAIL";
+    return "INFO";
+}
+
+inline juce::String summarizeStatus (const juce::var& root)
+{
+    auto* rootObject = root.getDynamicObject();
+    if (rootObject == nullptr)
+        return "Waiting for backend status...";
+
+    auto status = rootObject->getProperty ("status").toString();
+    auto progress = rootObject->getProperty ("progress").toString();
+    auto message = rootObject->getProperty ("message").toString();
+    auto events = rootObject->getProperty ("events");
+
+    juce::String output;
+    output << "STATUS";
+    if (status.isNotEmpty())
+        output << ": " << status;
+    if (progress.isNotEmpty())
+        output << " (" << progress << "%)";
+    output << "\n";
+    if (message.isNotEmpty())
+        output << message << "\n";
+
+    if (auto* eventArray = events.getArray())
+    {
+        output << "\nPIPELINE\n";
+        for (const auto& event : *eventArray)
+        {
+            auto* object = event.getDynamicObject();
+            if (object == nullptr)
+                continue;
+
+            auto type = object->getProperty ("type").toString();
+            auto label = object->getProperty ("label").toString();
+            auto detail = object->getProperty ("detail").toString();
+
+            output << eventPrefix (type) << "  " << label;
+            if (detail.isNotEmpty())
+                output << " - " << detail;
+            output << "\n";
+        }
+    }
+    else
+    {
+        output << "\nPipeline events will appear here once analysis starts.\n";
+    }
+
+    return output;
+}
+
 inline juce::String summarizeResult (const juce::var& root, juce::String& promptForClipboard)
 {
     auto* rootObject = root.getDynamicObject();

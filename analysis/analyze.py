@@ -16,14 +16,17 @@ from stem_separation import separate_for_transcription
 
 
 def run(audio_path: str, output_dir: str) -> dict:
+    _progress("feature extraction: reading audio and estimating BPM/key/energy")
     analysis = analyze_wav(audio_path)
     os.makedirs(output_dir, exist_ok=True)
 
+    _progress("midi sketch: writing reference-sketch.mid from estimated BPM/key")
     sketch_path = write_reference_sketch_midi(
         os.path.join(output_dir, "reference-sketch.mid"),
         key=analysis.get("key") or "C major",
         bpm=analysis.get("bpm") or 120.0,
     )
+    _progress("heuristic bass: tracking low-frequency full-mix fallback")
     bass = transcribe_bassline(audio_path, analysis.get("bpm"))
     midi_files = {"reference_sketch": sketch_path}
     midi_assets = [
@@ -133,12 +136,17 @@ def main() -> int:
 
 
 def _skipped_stems() -> dict:
+    _progress("stem separation: skipped because Basic Pitch is disabled or unavailable")
     return {
         "available": False,
         "method": "skipped",
         "stems": {},
         "warnings": ["Stem separation skipped because model transcription is disabled or Basic Pitch is not installed."],
     }
+
+
+def _progress(message: str) -> None:
+    print(f"progress: {message}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

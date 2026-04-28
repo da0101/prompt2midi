@@ -198,6 +198,7 @@ void Prompt2midiAudioProcessorEditor::startAnalyzeJob()
     copyPromptButton.setEnabled (false);
     analyzeButton.setEnabled (false);
     publishStatus ("Submitting local job...");
+    resultOutput.setText ("STATUS: queued\nSubmitting local analysis job...", juce::dontSendNotification);
 
     auto prompt = promptInput.getText();
     auto audioPath = selectedAudioFile.existsAsFile() ? selectedAudioFile.getFullPathName() : juce::String();
@@ -221,9 +222,12 @@ void Prompt2midiAudioProcessorEditor::runAnalyzeJob (juce::String prompt, juce::
         return;
     }
 
-    for (int attempt = 0; attempt < 240 && ! shuttingDown; ++attempt)
+    constexpr int pollIntervalMs = 500;
+    constexpr int maxPollAttempts = (30 * 60 * 1000) / pollIntervalMs;
+
+    for (int attempt = 0; attempt < maxPollAttempts && ! shuttingDown; ++attempt)
     {
-        juce::Thread::sleep (500);
+        juce::Thread::sleep (pollIntervalMs);
         auto statusUrl = juce::String (localApiBase) + "/status?id=" + juce::URL::addEscapeChars (jobId, true);
         auto statusResponse = prompt2midi::requestJson (statusUrl);
         auto statusJson = juce::JSON::parse (statusResponse);
@@ -231,7 +235,12 @@ void Prompt2midiAudioProcessorEditor::runAnalyzeJob (juce::String prompt, juce::
         auto message = prompt2midi::propertyString (statusJson, "message");
 
         if (message.isNotEmpty())
-            publishStatus (message);
+        {
+            auto userMessage = message;
+            if (status == "running" && attempt >= 10)
+                userMessage << " Stem analysis can take several minutes.";
+            publishProgress (userMessage, prompt2midi::summarizeStatus (statusJson));
+        }
 
         if (status == "succeeded")
         {
@@ -247,7 +256,7 @@ void Prompt2midiAudioProcessorEditor::runAnalyzeJob (juce::String prompt, juce::
         }
     }
 
-    publishFailure ("Analysis timed out.");
+    publishFailure ("Analysis is still running. Check the backend terminal.");
 }
 
 void Prompt2midiAudioProcessorEditor::publishStatus (const juce::String& text)
@@ -257,6 +266,19 @@ void Prompt2midiAudioProcessorEditor::publishStatus (const juce::String& text)
     {
         if (safeThis != nullptr)
             safeThis->statusLabel.setText (text, juce::dontSendNotification);
+    });
+}
+
+void Prompt2midiAudioProcessorEditor::publishProgress (const juce::String& statusText, const juce::String& detailText)
+{
+    juce::Component::SafePointer<Prompt2midiAudioProcessorEditor> safeThis (this);
+    juce::MessageManager::callAsync ([safeThis, statusText, detailText]
+    {
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->statusLabel.setText (statusText, juce::dontSendNotification);
+        safeThis->resultOutput.setText (detailText, juce::dontSendNotification);
     });
 }
 

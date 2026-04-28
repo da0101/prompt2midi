@@ -6,11 +6,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
 def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
     if os.environ.get("PROMPT2MIDI_DISABLE_STEMS") == "1":
+        _progress("stem separation: disabled by environment")
         return {
             "available": False,
             "method": "disabled",
@@ -20,6 +22,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
 
     engine = _find_demucs()
     if engine is None:
+        _progress("stem separation: Demucs not installed")
         return {
             "available": False,
             "method": "demucs_htdemucs",
@@ -34,6 +37,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
     stable_root.mkdir(parents=True, exist_ok=True)
 
     timeout = _timeout_seconds()
+    _progress("stem separation: running Demucs htdemucs two-stem bass split")
     command = [
         engine,
         "--two-stems=bass",
@@ -60,6 +64,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
+        _progress("stem separation: Demucs timed out")
         return {
             "available": False,
             "method": "demucs_htdemucs",
@@ -68,6 +73,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
         }
 
     if completed.returncode != 0:
+        _progress("stem separation: Demucs failed")
         return {
             "available": False,
             "method": "demucs_htdemucs",
@@ -77,6 +83,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
 
     bass_source = _find_stem(demucs_root, "bass.wav")
     if bass_source is None:
+        _progress("stem separation: Demucs finished but bass.wav is missing")
         return {
             "available": False,
             "method": "demucs_htdemucs",
@@ -86,6 +93,7 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
 
     stable_bass = stable_root / "bass.wav"
     shutil.copyfile(bass_source, stable_bass)
+    _progress(f"stem separation: produced 1 stem bass={stable_bass}")
     return {
         "available": True,
         "method": "demucs_htdemucs",
@@ -127,3 +135,7 @@ def _find_stem(directory: Path, filename: str) -> str | None:
 def _last_error(output: str) -> str:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     return lines[-1] if lines else "unknown error"
+
+
+def _progress(message: str) -> None:
+    print(f"progress: {message}", file=sys.stderr, flush=True)

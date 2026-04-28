@@ -13,6 +13,7 @@ function createJobStore() {
         status: 'queued',
         progress: 0,
         message: 'Queued.',
+        events: [],
         result: null,
         error: null,
         created_at: now,

@@ -61,6 +61,7 @@ function createApp(options = {}) {
           status: job.status,
           progress: job.progress,
           message: job.message,
+          events: job.events || [],
           error: job.error || null
         });
       }
@@ -100,7 +101,7 @@ function createApp(options = {}) {
 }
 
 async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
-  const log = createPipelineLogger(jobId);
+  const log = createJobPipelineLogger(jobId, jobs);
   jobs.update(jobId, { status: 'running', progress: 10, message: 'Preparing local analysis.' });
   log.banner(input);
 
@@ -154,6 +155,59 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
     });
     log.fail(error);
   }
+}
+
+function createJobPipelineLogger(jobId, jobs) {
+  const terminal = createPipelineLogger(jobId);
+
+  function record(type, label, detail = '') {
+    const job = jobs.get(jobId);
+    if (!job) return;
+    const events = [
+      ...(job.events || []),
+      {
+        at: new Date().toISOString(),
+        type,
+        label,
+        detail
+      }
+    ].slice(-50);
+    jobs.update(jobId, {
+      events,
+      message: detail ? `${label}: ${detail}` : label
+    });
+  }
+
+  return {
+    banner(input) {
+      terminal.banner(input);
+      record('start', 'Job started', input.audioPath ? `Audio: ${input.audioPath}` : 'Prompt-only mode');
+    },
+    stage(name, detail = '') {
+      terminal.stage(name, detail);
+      record('stage', name, detail);
+    },
+    done(name, detail = '') {
+      terminal.done(name, detail);
+      record('done', name, detail);
+    },
+    warn(detail) {
+      terminal.warn(detail);
+      record('warning', 'Warning', detail);
+    },
+    info(detail) {
+      terminal.info(detail);
+      record('detail', 'Detail', detail);
+    },
+    fail(error) {
+      terminal.fail(error);
+      record('failed', 'Analysis failed', error && (error.message || String(error)));
+    },
+    success(detail = '') {
+      terminal.success(detail);
+      record('complete', 'Analysis complete', detail);
+    }
+  };
 }
 
 function promptOnlyAnalysis(prompt) {

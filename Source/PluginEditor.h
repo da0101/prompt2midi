@@ -35,6 +35,7 @@ private:
     void runAnalyzeJob (juce::String prompt, juce::String audioPath);
     void configureInterface();
     void publishStatus (const juce::String& text);
+    void publishProgress (const juce::String& statusText, const juce::String& detailText);
     void publishResult (const juce::String& responseJson);
     void publishFailure (const juce::String& text);
 

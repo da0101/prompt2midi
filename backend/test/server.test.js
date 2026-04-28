@@ -24,6 +24,7 @@ describe('prompt2midi local API', () => {
 
       const status = await waitForStatus(server, start.body.job_id, 'succeeded');
       assert.equal(status.body.progress, 100);
+      assert.ok(status.body.events.some((event) => event.label === 'Analysis complete'));
 
       const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
       assert.equal(result.statusCode, 200);
@@ -86,7 +87,8 @@ describe('prompt2midi local API', () => {
       });
 
       assert.equal(start.statusCode, 202);
-      await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+      const status = await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+      assert.ok(status.body.events.some((event) => event.detail.includes('feature extraction')));
 
       const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
       assert.equal(result.statusCode, 200);

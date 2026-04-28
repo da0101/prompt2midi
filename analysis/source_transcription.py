@@ -7,6 +7,7 @@ import csv
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def can_run_model_transcription() -> bool:
 
 def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, stem_result: dict | None = None) -> dict:
     if os.environ.get("PROMPT2MIDI_DISABLE_MODEL") == "1":
+        _progress("model transcription: disabled by environment")
         return {
             "available": False,
             "method": "basic_pitch",
@@ -47,6 +49,7 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
         "Review and correct MIDI by ear before using it as production material.",
     ]
     if engine is None:
+        _progress("model transcription: Basic Pitch not installed")
         return {
             "available": False,
             "method": "basic_pitch",
@@ -54,6 +57,7 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
             "warnings": ["Basic Pitch engine not installed. Run npm run setup:transcription."],
         }
 
+    _progress("model transcription: running Basic Pitch on full mix")
     mix_run = _run_basic_pitch(
         engine,
         audio_path,
@@ -129,6 +133,7 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
                         source_stage="separated_stem",
                     )
                 )
+                _progress(f"model transcription: wrote source-bass-transcription.mid with {len(stem_bass_notes)} notes")
             else:
                 warnings.append("Basic Pitch ran on the bass stem but produced no usable low-note bass events.")
         else:
@@ -137,6 +142,7 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
     bass_notes = _extract_bassline(notes)
     if bass_notes:
         bass_path = write_note_events_midi(str(Path(output_dir) / "model-bass-transcription.mid"), bass_notes, bpm=bpm or 120)
+        _progress(f"model transcription: wrote model-bass-transcription.mid with {len(bass_notes)} notes")
         tracks.append(
             ModelTrack(
                 key="model_bass_transcription",
@@ -173,6 +179,7 @@ def _run_basic_pitch(
     minimum_frequency: int,
     maximum_frequency: int,
 ) -> dict:
+    _progress(f"model transcription: Basic Pitch {run_name} frequency range {minimum_frequency}-{maximum_frequency} Hz")
     model_dir = Path(output_dir) / "basic-pitch" / run_name
     runtime_dir = Path(output_dir) / "basic-pitch-runtime" / run_name
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -212,7 +219,9 @@ def _run_basic_pitch(
     if midi_path is None or csv_path is None:
         return {"ok": False, "warning": f"Basic Pitch {run_name} completed but did not produce MIDI and note-event outputs."}
 
-    return {"ok": True, "midi_path": midi_path, "notes": _read_note_events(csv_path)}
+    notes = _read_note_events(csv_path)
+    _progress(f"model transcription: Basic Pitch {run_name} produced {len(notes)} note events")
+    return {"ok": True, "midi_path": midi_path, "notes": notes}
 
 
 def _find_basic_pitch() -> str | None:
@@ -299,3 +308,7 @@ def _confidence_from_notes(events: list[dict]) -> float:
 def _last_error(output: str) -> str:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     return lines[-1] if lines else "unknown error"
+
+
+def _progress(message: str) -> None:
+    print(f"progress: {message}", file=sys.stderr, flush=True)
