@@ -19,7 +19,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - Source files currently live in `Source/PluginProcessor.*`, `Source/PluginEditor.*`, `Source/LocalApiClient.h`, and `Source/ModernTheme.h`.
 - `Prompt2midiAudioProcessor` is intentionally pass-through audio processing for the MVP.
 - `Prompt2midiAudioProcessorEditor` owns WAV/MP3 choose/drop, prompt input, async local API polling, result display, and copy prompt.
-- `LocalApiClient.h` labels MIDI assets by confidence level and limitations: reference sketch is generated, model MIDI is Basic Pitch output, and heuristic bass is full-mix tracking.
+- `LocalApiClient.h` labels MIDI assets by confidence level and limitations: reference sketch is generated, model MIDI is Basic Pitch output, stem-aware bass is Demucs plus Basic Pitch, and heuristic bass is full-mix tracking.
 - The plugin should call a local API for long-running work rather than doing analysis inside the plugin.
 - Keep host/audio-thread stability as the primary invariant.
 

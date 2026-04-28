@@ -2,7 +2,7 @@
 stream_id: stream-source-aware-transcription-v1
 slug: source-aware-transcription-v1
 type: feature
-status: in-progress
+status: done
 agent_owner: codex
 domain_slugs: [audio-analysis, llm-midi-generation, local-orchestration, juce-plugin]
 repo_ids: [prompt2midi]
@@ -10,7 +10,7 @@ base_branch: feature/audio-intelligence-v1
 git_branch: feature/source-aware-transcription-v1
 created_at: 2026-04-28
 updated_at: 2026-04-28
-closure_approved: false
+closure_approved: true
 ---
 
 # source-aware-transcription-v1

@@ -21,8 +21,8 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
   - `GET /status`
   - `GET /result`
 - Node owns job queue/state, MP3/WAV boundary validation, FFmpeg MP3 decoding, Python process invocation, deterministic prompt generation, and result aggregation.
-- Node passes through `midi_files` and structured `midi_assets` from Python, including generated sketches, optional model transcription, and heuristic fallbacks.
-- Development scripts include `npm run dev:refresh` for rebuild + backend restart + live logs and `npm run setup:transcription` for the optional Basic Pitch engine.
+- Node passes through `midi_files` and structured `midi_assets` from Python, including generated sketches, optional Basic Pitch model transcription, optional Demucs stem-aware bass transcription, and heuristic fallbacks.
+- Development scripts include `npm run dev:refresh` for rebuild + backend restart + live logs, `npm run setup:transcription` for Basic Pitch, and `npm run setup:stems` for the optional Demucs stem engine.
 - WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 
@@ -51,6 +51,8 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - `backend/test/server.test.js`
 - `docs/local-backend.md`
 - `docs/manual-verification.md`
+- `requirements-demucs.txt`
+- `scripts/setup-stem-engine.sh`
 
 ## Decisions locked
 

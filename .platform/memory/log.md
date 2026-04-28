@@ -5,6 +5,8 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+
+2026-04-28 — closed stream source-aware-transcription-v1 → ./.platform/work/archive/source-aware-transcription-v1.md (by danilulmashev)
 - 2026-04-28 — commit `08eebd4`: Add stem-aware bass transcription — auto-logged
 - 2026-04-28 — source-aware-transcription-v1 stem pass — added optional Demucs bass-stem separation feeding Basic Pitch and verified real MP3 output with `source-bass-transcription.mid` — stem-aware MIDI now exists locally but still needs musical QA by ear.
 - 2026-04-28 — commit: Add visual pipeline logging — auto-logged

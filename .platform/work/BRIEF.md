@@ -4,25 +4,25 @@
 > 30-second orientation: what we're building, why, and where we stand.
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
-**Feature:** source-aware-transcription-v1
-**Status:** in-progress
-**Stream file:** `work/source-aware-transcription-v1.md`
+**Feature:** none active
+**Status:** ready for next stream
+**Stream file:** none
 
 ---
 
 ## What we're building
 
-Build the next accuracy step after `audio-intelligence-v1`: a source-aware transcription path that can outperform the current full-mix bass heuristic. The goal is not a polished UI; it is a materially better local MIDI extraction foundation with honest labels and tests.
+The last stream, `source-aware-transcription-v1`, is closed. The project now has a local source-aware bass path: Demucs separates a bass stem, Basic Pitch transcribes it, and the backend exposes `source-bass-transcription.mid` as a distinct MIDI asset.
 
 ## Why
 
-The user already caught that generated/heuristic MIDI can be far from the reference track. The product needs a credible path from real audio reference to editable Ableton MIDI, while staying local-first and clear about confidence.
+The user needs a credible path from real audio reference to editable Ableton MIDI, while staying local-first and clear about confidence.
 
 ## What done looks like
 
-- A local transcription approach is selected with documented tradeoffs.
-- Bass extraction becomes more musically useful than the current heuristic on fixtures and the provided MP3 smoke case.
-- The backend/JUCE result contract keeps generated sketches, heuristic output, and source-aware transcription clearly separated.
+- Select the next stream from `promt.md`.
+- Keep generated sketches, heuristic output, model transcription, and source-aware transcription clearly separated.
+- Preserve local-first operation and graceful fallback when optional engines are absent.
 
 ## Architecture decisions locked
 
@@ -32,7 +32,7 @@ The user already caught that generated/heuristic MIDI can be far from the refere
 
 ## Current state
 
-The repo now supports prompt/WAV/MP3 jobs, FFmpeg MP3 decoding, BPM/key confidence, `reference-sketch.mid`, and optional experimental `bass-transcription.mid`. The remaining accuracy gap is source-aware extraction: separating or modeling musical parts before producing MIDI.
+The repo supports prompt/WAV/MP3 jobs, FFmpeg MP3 decoding, BPM/key confidence, `reference-sketch.mid`, optional Basic Pitch `model-transcription.mid`, optional Demucs-assisted `source-bass-transcription.mid`, full-mix `model-bass-transcription.mid`, and experimental heuristic `bass-transcription.mid`.
 
 See `work/ACTIVE.md` for stream status.
 

@@ -5,7 +5,6 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
-| source-aware-transcription-v1 | feature | in-progress | codex | 2026-04-28 |
 
 ---
 
