@@ -140,6 +140,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
         analysis: analysisPayload.analysis,
         interpretation,
         midi_files: analysisPayload.midi_files || {},
+        export_files: analysisPayload.export_files || {},
         midi_assets: analysisPayload.midi_assets || [],
         midi_notes: analysisPayload.midi_notes || []
       }

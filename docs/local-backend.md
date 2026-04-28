@@ -67,6 +67,9 @@ MIDI outputs:
 
 The result also includes `midi_assets`, a structured list with `kind`, `source_method`, confidence, note count, and limitations for each MIDI file.
 
+Product-facing MIDI is copied into `tmp/jobs/<job_id>/exports/` and marked with `is_recommended_output: true`.
+Use that folder when auditioning or giving feedback. Other files in the job folder are retained as debug/intermediate artifacts.
+
 Optional engines are capability-gated:
 
 - `PROMPT2MIDI_DISABLE_MODEL=1` disables Basic Pitch.

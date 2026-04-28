@@ -72,7 +72,10 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
           const stemNames = Array.isArray(stems.stems) && stems.stems.length > 0 ? stems.stems.join(',') : 'none';
           log.info(`stem separation: ${stems.available ? 'on' : 'off'} method=${stems.method} stems=${stemNames}`);
         }
-        for (const asset of payload.midi_assets || []) {
+        for (const asset of (payload.midi_assets || []).filter((item) => item.is_recommended_output)) {
+          log.info(`recommended output ${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
+        }
+        for (const asset of (payload.midi_assets || []).filter((item) => !item.is_recommended_output)) {
           log.info(`${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
         }
       }
@@ -87,6 +90,7 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
       resolve({
         analysis,
         midi_files: payload.midi_files || {},
+        export_files: payload.export_files || {},
         midi_assets: payload.midi_assets || [],
         midi_notes: payload.midi_notes || []
       });

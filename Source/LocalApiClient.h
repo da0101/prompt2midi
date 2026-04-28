@@ -179,19 +179,25 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
 
     if (auto* assets = midiAssets.getArray())
     {
-        output << "MIDI assets:\n";
+        output << "Recommended files:\n";
+        bool wroteRecommended = false;
         for (const auto& asset : *assets)
         {
             auto* object = asset.getDynamicObject();
             if (object == nullptr)
+                continue;
+            if (! static_cast<bool> (object->getProperty ("is_recommended_output")))
                 continue;
 
             auto label = object->getProperty ("label").toString();
             auto path = object->getProperty ("path").toString();
             auto confidence = object->getProperty ("confidence").toString();
             auto sourceMethod = object->getProperty ("source_method").toString();
+            auto exportName = object->getProperty ("export_name").toString();
 
             output << "- " << (label.isNotEmpty() ? label : "MIDI asset");
+            if (exportName.isNotEmpty())
+                output << " [" << exportName << "]";
             if (confidence.isNotEmpty())
                 output << " (" << confidenceLabel (confidence) << " confidence)";
             if (sourceMethod.isNotEmpty())
@@ -200,7 +206,10 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
                 output << "\n  " << path;
             output << "\n";
             appendStringArray (output, object->getProperty ("limitations"), "  Limitation: ");
+            wroteRecommended = true;
         }
+        if (! wroteRecommended)
+            output << "No recommended MIDI export was produced for this run.\n";
         output << "\n";
     }
     else

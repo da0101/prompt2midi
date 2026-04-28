@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 
 from bass_transcription import transcribe_bassline
@@ -83,6 +84,7 @@ def run(audio_path: str, output_dir: str) -> dict:
             }
         )
 
+    export_files = _promote_exports(output_dir, midi_files, midi_assets)
     analysis["bass_transcription"] = {
         "event_count": len(bass["events"]),
         "confidence": bass["confidence"],
@@ -106,6 +108,7 @@ def run(audio_path: str, output_dir: str) -> dict:
         "ok": True,
         "analysis": analysis,
         "midi_files": midi_files,
+        "export_files": export_files,
         "midi_assets": midi_assets,
         "midi_notes": [
             "reference-sketch.mid is generated from estimated BPM/key only.",
@@ -143,6 +146,42 @@ def _skipped_stems() -> dict:
         "stems": {},
         "warnings": ["Stem separation skipped because model transcription is disabled or Basic Pitch is not installed."],
     }
+
+
+def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict]) -> dict:
+    exports_dir = os.path.join(output_dir, "exports")
+    os.makedirs(exports_dir, exist_ok=True)
+    export_files: dict[str, str] = {}
+    has_source_bass = any(asset["key"] == "source_bass_transcription" for asset in midi_assets)
+
+    for asset in midi_assets:
+        key = asset["key"]
+        export_name = _export_name(key, has_source_bass)
+        if export_name is None:
+            asset["is_recommended_output"] = False
+            asset["debug_path"] = asset["path"]
+            continue
+
+        exported_path = os.path.abspath(os.path.join(exports_dir, export_name))
+        shutil.copyfile(asset["path"], exported_path)
+        asset["debug_path"] = asset["path"]
+        asset["path"] = exported_path
+        asset["is_recommended_output"] = True
+        asset["export_name"] = export_name
+        export_files[key] = exported_path
+        midi_files[key] = exported_path
+
+    return export_files
+
+
+def _export_name(key: str, has_source_bass: bool) -> str | None:
+    if key == "source_bass_transcription":
+        return "stem-bass.mid"
+    if key == "model_transcription":
+        return "full-mix-model.mid"
+    if key == "model_bass_transcription" and not has_source_bass:
+        return "fallback-full-mix-bass.mid"
+    return None
 
 
 def _progress(message: str) -> None:

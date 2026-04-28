@@ -9,7 +9,7 @@ import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
 from feature_extraction import analyze_wav
-from analyze import run as run_analysis
+from analyze import _promote_exports, run as run_analysis
 from bass_transcription import transcribe_bassline
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from source_transcription import _extract_bassline, transcribe_with_model
@@ -203,6 +203,36 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertEqual(len(bassline), 1)
         self.assertEqual(bassline[0]["midi_note"], 43)
         self.assertAlmostEqual(bassline[0]["duration"], 0.5)
+
+    def test_exports_promote_only_recommended_midi_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            midi_files = {}
+            assets = []
+            for key in ["reference_sketch", "model_transcription", "source_bass_transcription", "model_bass_transcription"]:
+                path = os.path.join(temp_dir, f"{key}.mid")
+                with open(path, "wb") as midi_file:
+                    midi_file.write(b"MThd" + bytes(18))
+                midi_files[key] = path
+                assets.append(
+                    {
+                        "key": key,
+                        "path": path,
+                        "label": key,
+                        "kind": "model_transcription",
+                        "limitations": [],
+                    }
+                )
+
+            export_files = _promote_exports(os.path.join(temp_dir, "job"), midi_files, assets)
+
+        assets_by_key = {asset["key"]: asset for asset in assets}
+        self.assertIn("model_transcription", export_files)
+        self.assertIn("source_bass_transcription", export_files)
+        self.assertNotIn("reference_sketch", export_files)
+        self.assertNotIn("model_bass_transcription", export_files)
+        self.assertTrue(assets_by_key["model_transcription"]["is_recommended_output"])
+        self.assertTrue(assets_by_key["source_bass_transcription"]["is_recommended_output"])
+        self.assertFalse(assets_by_key["reference_sketch"]["is_recommended_output"])
 
     @staticmethod
     def _write_pulsed_wav(path: str, bpm: int):
