@@ -16,6 +16,18 @@ python3 -m unittest analysis/test_feature_extraction.py
 npm test
 ```
 
+Install the optional local model transcription engine:
+
+```bash
+npm run setup:transcription
+```
+
+Run the full developer loop with backend logs visible:
+
+```bash
+npm run dev:refresh
+```
+
 The backend listens on `http://127.0.0.1:47321` and exposes:
 
 - `POST /analyze`
@@ -24,4 +36,4 @@ The backend listens on `http://127.0.0.1:47321` and exposes:
 
 Phase 2 accepts prompt-only jobs plus WAV/WAVE and MP3 references. MP3 input is decoded locally with `ffmpeg` before the Python WAV analyzer runs.
 
-MIDI output always includes `reference-sketch.mid`, generated from estimated BPM/key only. When low-frequency pitch tracking finds usable note events, the job also writes `bass-transcription.mid`; that file is experimental monophonic bass tracking, not full source-track transcription.
+MIDI output always includes `reference-sketch.mid`, generated from estimated BPM/key only. With the optional Basic Pitch engine installed, jobs also create `model-transcription.mid` and `model-bass-transcription.mid`. The legacy `bass-transcription.mid` remains a heuristic fallback and is not source-separated transcription.

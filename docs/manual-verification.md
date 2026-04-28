@@ -19,15 +19,17 @@ Expected:
 - Result includes `analysis.bpm`, `analysis.key`, `interpretation.producer_summary`, `interpretation.ai_music_prompt`.
 - Reference jobs create `tmp/jobs/<job_id>/reference-sketch.mid`.
 - The result labels that MIDI as a generated sketch, not source-track transcription.
+- With `npm run setup:transcription` completed, reference jobs also create `model-transcription.mid` and usually `model-bass-transcription.mid`.
 - When low-frequency note tracking finds events, jobs also create `tmp/jobs/<job_id>/bass-transcription.mid`.
 - The bass transcription is experimental monophonic tracking and should be edited by ear.
 - MP3 jobs include an analysis warning that the input was decoded through `ffmpeg`.
+- Low-confidence BPM/key results should say possible/unverified instead of sounding authoritative.
 
 ## JUCE plugin
 
 The editor is wired to the local backend at `http://127.0.0.1:47321`.
 
-1. Start the backend with `npm start`.
+1. Start the backend with `npm run dev:refresh` so server logs stay visible.
 2. Open the plugin UI.
 3. Drop or choose a `.wav`, `.wave`, or `.mp3` file, or enter a prompt only.
 4. Click Analyze.

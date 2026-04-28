@@ -7,6 +7,8 @@ const { describe, it } = require('node:test');
 const { findFfmpeg } = require('../lib/audioInput');
 const { createApp, promptOnlyAnalysis } = require('../server');
 
+process.env.PROMPT2MIDI_DISABLE_MODEL = '1';
+
 describe('prompt2midi local API', () => {
   it('starts a prompt-only job and returns producer prompt output', async () => {
     const server = await listen(createApp());
@@ -91,6 +93,8 @@ describe('prompt2midi local API', () => {
       assert.ok(result.body.result.analysis.bpm_confidence > 0);
       assert.ok(result.body.result.midi_files.reference_sketch.endsWith('reference-sketch.mid'));
       assert.ok(fs.existsSync(result.body.result.midi_files.reference_sketch));
+      assert.ok(Array.isArray(result.body.result.midi_assets));
+      assert.equal(result.body.result.midi_assets.find((asset) => asset.key === 'reference_sketch').is_transcription, false);
       assert.ok(result.body.result.midi_files.bass_transcription.endsWith('bass-transcription.mid'));
       assert.ok(fs.existsSync(result.body.result.midi_files.bass_transcription));
       assert.match(result.body.result.midi_notes.join(' '), /experimental monophonic/i);
@@ -138,6 +142,25 @@ describe('prompt-only analysis', () => {
     assert.equal(analysis.bpm, 132);
     assert.ok(analysis.bpm_confidence > 0);
     assert.equal(analysis.key, 'F# minor');
+  });
+
+  it('does not make low-confidence bpm and key sound authoritative', () => {
+    const { buildPromptPackage } = require('../lib/promptGenerator');
+    const output = buildPromptPackage({
+      prompt: '',
+      analysis: {
+        bpm: 60,
+        bpm_confidence: 0.2,
+        key: 'D major',
+        key_confidence: 0.32,
+        energy_curve: []
+      }
+    });
+
+    assert.match(output.producer_summary, /Possible tempo/);
+    assert.match(output.producer_summary, /Possible tonal center/);
+    assert.match(output.ai_music_prompt, /tempo unverified/);
+    assert.doesNotMatch(output.ai_music_prompt, / in D major/);
   });
 });
 

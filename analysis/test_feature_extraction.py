@@ -9,8 +9,10 @@ import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
 from feature_extraction import analyze_wav
+from analyze import run as run_analysis
 from bass_transcription import transcribe_bassline
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
+from source_transcription import _extract_bassline, transcribe_with_model
 
 
 class FeatureExtractionTest(unittest.TestCase):
@@ -61,6 +63,56 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn(43, notes)
         self.assertGreater(transcription["confidence"], 0.1)
         self.assertEqual(midi_bytes[:4], b"MThd")
+
+    def test_full_analysis_labels_generated_and_heuristic_midi_assets(self):
+        old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
+        os.environ["PROMPT2MIDI_DISABLE_MODEL"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                wav_path = os.path.join(temp_dir, "pulse.wav")
+                self._write_pulsed_wav(wav_path, bpm=120)
+
+                result = run_analysis(wav_path, os.path.join(temp_dir, "job"))
+        finally:
+            if old_disable is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_MODEL", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_MODEL"] = old_disable
+
+        assets = {asset["key"]: asset for asset in result["midi_assets"]}
+        self.assertFalse(assets["reference_sketch"]["is_transcription"])
+        self.assertEqual(assets["reference_sketch"]["kind"], "generated_sketch")
+        self.assertIn("bass_transcription", assets)
+        self.assertEqual(assets["bass_transcription"]["source_method"], "full_mix_low_frequency_tracking")
+        self.assertFalse(result["analysis"]["model_transcription"]["available"])
+
+    def test_model_transcription_can_be_explicitly_disabled(self):
+        old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
+        os.environ["PROMPT2MIDI_DISABLE_MODEL"] = "1"
+        try:
+            result = transcribe_with_model("unused.wav", "/tmp", bpm=120)
+        finally:
+            if old_disable is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_MODEL", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_MODEL"] = old_disable
+
+        self.assertFalse(result["available"])
+        self.assertIn("disabled", result["warnings"][0])
+
+    def test_model_bass_filter_keeps_one_low_note_per_time_bin(self):
+        events = [
+            {"start": 0.01, "duration": 0.1, "midi_note": 55, "velocity": 70, "confidence": 0.7},
+            {"start": 0.02, "duration": 0.1, "midi_note": 43, "velocity": 65, "confidence": 0.7},
+            {"start": 0.26, "duration": 0.1, "midi_note": 43, "velocity": 60, "confidence": 0.7},
+            {"start": 0.52, "duration": 0.1, "midi_note": 67, "velocity": 80, "confidence": 0.7},
+        ]
+
+        bassline = _extract_bassline(events)
+
+        self.assertEqual(len(bassline), 1)
+        self.assertEqual(bassline[0]["midi_note"], 43)
+        self.assertAlmostEqual(bassline[0]["duration"], 0.5)
 
     @staticmethod
     def _write_pulsed_wav(path: str, bpm: int):

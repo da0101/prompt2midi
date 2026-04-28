@@ -8,6 +8,18 @@ The local backend uses Node.js orchestration, Python stdlib WAV analysis, and op
 npm start
 ```
 
+For local model MIDI transcription, install the isolated Basic Pitch engine:
+
+```bash
+npm run setup:transcription
+```
+
+For everyday plugin testing with live backend logs:
+
+```bash
+npm run dev:refresh
+```
+
 Default address:
 
 ```text
@@ -40,4 +52,8 @@ MP3 files are decoded into `tmp/jobs/<job_id>/decoded-input.wav` before Python a
 MIDI outputs:
 
 - `reference-sketch.mid` is always generated from estimated BPM/key and is not transcription.
-- `bass-transcription.mid` is written when experimental monophonic low-frequency tracking finds note events. Treat it as an editable starting point, not a finished extraction.
+- `model-transcription.mid` is written when the Basic Pitch engine is installed. It is model MIDI from the supplied mix and should still be corrected by ear.
+- `model-bass-transcription.mid` is a pitch-range filtered bass candidate from model notes. It is not stem-separated bass.
+- `bass-transcription.mid` is written when experimental monophonic low-frequency tracking finds note events. Treat it as a legacy heuristic fallback, not a finished extraction.
+
+The result also includes `midi_assets`, a structured list with `kind`, `source_method`, confidence, note count, and limitations for each MIDI file.

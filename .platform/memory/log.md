@@ -5,6 +5,8 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-04-28 — commit: Add model-backed MIDI transcription — auto-logged
+- 2026-04-28 — source-aware-transcription-v1 model pass — added optional Basic Pitch setup/runner, structured MIDI assets, low-confidence wording guards, and real MP3 smoke output — model MIDI is now available locally, but stem separation remains future work.
 - 2026-04-28 — commit: Close audio intelligence stream — auto-logged
 
 2026-04-28 — closed stream audio-intelligence-v1 → ./.platform/work/archive/audio-intelligence-v1.md (by danilulmashev)

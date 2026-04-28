@@ -12,9 +12,9 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 |---|---|---|---|
 | JUCE plugin shell | 🔵 Exists | 2026-04-28 | Editor now has file choose/drop, prompt input, async local API polling, result display, and copy prompt. JUCE is installed at `/Applications/JUCE`; Projucer regenerated the Xcode project and Debug builds pass. |
 | Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV/WAVE/MP3 paths; backend decodes MP3 locally with FFmpeg before Python WAV analysis. |
-| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free PCM WAV analyzer returns BPM/key estimates with confidence, energy curve, loudness, spectral basics, and warnings. |
+| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free PCM WAV analyzer returns BPM/key estimates with confidence, energy curve, loudness, spectral basics, warnings, and optional Basic Pitch model transcription when installed. |
 | Node orchestrator | 🔵 Exists | 2026-04-28 | Local stdlib Node API has `/analyze`, `/status`, `/result`, job state, Python bridge, and prompt package generation. |
-| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid` from estimated BPM/key and can also write experimental `bass-transcription.mid` from monophonic low-frequency tracking. Full source separation, melody, and chord extraction remain pending. |
+| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid`, optional Basic Pitch `model-transcription.mid` / `model-bass-transcription.mid`, and legacy heuristic `bass-transcription.mid`. Full source separation, melody cleanup, and chord extraction remain pending. |
 | Local LLM interpretation | 🔵 Exists | 2026-04-28 | Deterministic local prompt generator turns structured analysis into producer summary and AI music prompt. Real local model runtime remains deferred. |
 | Ableton UX | 🔵 Exists | 2026-04-28 | Functional MVP UI exists and builds as standalone/AU/VST3. It is accepted as temporary; full UI polish and in-host Ableton verification remain follow-ups. |
 
@@ -27,8 +27,8 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 ## Immediate priorities
 
-1. **Verify and close audio-intelligence-v1** — MP3 support, confidence metadata, honest sketch labeling, and first-pass bass transcription are implemented.
-2. **Plan deeper transcription** — next meaningful leap is source-aware bass/chord/melody extraction rather than full-mix heuristic tracking.
+1. **Continue source-aware-transcription-v1** — Basic Pitch model MIDI is integrated; next accuracy step is stem-aware bass/chord/melody cleanup.
+2. **Validate real references** — compare `model-transcription.mid`, `model-bass-transcription.mid`, and heuristic output by ear in Ableton.
 3. **Choose local LLM runtime** — deterministic prompt generation still needs replacement with the selected local model path.
 
 ## Open decisions

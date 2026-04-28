@@ -1,28 +1,43 @@
 function buildPromptPackage({ prompt = '', analysis }) {
   const bpm = analysis.bpm || 120;
   const key = analysis.key || 'C major';
-  const bpmConfidence = confidencePhrase(analysis.bpm_confidence);
-  const keyConfidence = confidencePhrase(analysis.key_confidence);
+  const bpmConfidenceValue = Number(analysis.bpm_confidence) || 0;
+  const keyConfidenceValue = Number(analysis.key_confidence) || 0;
+  const bpmConfidence = confidencePhrase(bpmConfidenceValue);
+  const keyConfidence = confidencePhrase(keyConfidenceValue);
+  const hasReliableBpm = bpmConfidenceValue >= 0.55;
+  const hasReliableKey = keyConfidenceValue >= 0.55;
   const energy = summarizeEnergy(analysis.energy_curve || []);
   const userIntent = prompt.trim() || 'reference-track inspired production';
+  const modelReady = analysis.model_transcription && analysis.model_transcription.available;
 
   const styleTags = inferStyleTags(userIntent, energy);
+  const tempoPhrase = hasReliableBpm ? `${Math.round(bpm)} BPM` : `around ${Math.round(bpm)} BPM, tempo unverified`;
+  const keyPhrase = hasReliableKey ? `in ${key}` : 'with key left flexible';
   const aiPrompt = [
-    `${styleTags.join(', ')} track at ${Math.round(bpm)} BPM in ${key}`,
+    `${styleTags.join(', ')} track at ${tempoPhrase} ${keyPhrase}`,
     `with ${energy.phrase}`,
     'tight arrangement, producer-ready mix direction, and clear instrumental layers',
     userIntent
   ].filter(Boolean).join(', ');
 
   return {
-    producer_summary: `Estimated ${Math.round(bpm)} BPM (${bpmConfidence}) in ${key} (${keyConfidence}). The energy profile ${energy.summary}. Treat MIDI output as a generated sketch until deeper stem, chord, or section extraction exists.`,
+    producer_summary: [
+      hasReliableBpm ? `Tempo: ${Math.round(bpm)} BPM (${bpmConfidence}).` : `Possible tempo: around ${Math.round(bpm)} BPM, but confidence is ${bpmConfidence}.`,
+      hasReliableKey ? `Key: ${key} (${keyConfidence}).` : `Possible tonal center: ${key}, but confidence is ${keyConfidence}.`,
+      `The energy profile ${energy.summary}.`,
+      modelReady
+        ? 'Model MIDI transcription is available; audition it and correct by ear.'
+        : 'Model transcription is not available, so MIDI output is limited to generated or heuristic sketches.'
+    ].join(' '),
     style_tags: styleTags,
     ai_music_prompt: aiPrompt,
     next_steps: [
-      'Use bass-transcription MIDI when present, then edit by ear in Ableton.',
-      'Use the reference sketch as a fallback starting idea, not a transcription.',
+      modelReady ? 'Audition the model MIDI first, then correct timing and false notes in Ableton.' : 'Run npm run setup:transcription to enable model MIDI transcription.',
+      'Treat reference-sketch MIDI as generated scaffolding, not transcription.',
+      'Treat heuristic bass MIDI as full-mix pitch tracking, not source-separated bass.',
       'Use the generated prompt as a starting point for AI music generation.',
-      'Run a deeper pass once section and stem analysis are implemented.'
+      'Run a deeper stem-aware pass once source separation is implemented.'
     ]
   };
 }

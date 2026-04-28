@@ -65,6 +65,7 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo) {
       resolve({
         analysis,
         midi_files: payload.midi_files || {},
+        midi_assets: payload.midi_assets || [],
         midi_notes: payload.midi_notes || []
       });
     });

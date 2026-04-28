@@ -5,6 +5,9 @@
   "description": "Local-first Ableton/JUCE AI co-producer backend.",
   "type": "commonjs",
   "scripts": {
+    "app:refresh": "bash scripts/rebuild-standalone.sh",
+    "dev:refresh": "bash scripts/dev-refresh.sh",
+    "setup:transcription": "bash scripts/setup-transcription-engine.sh",
     "start": "node backend/server.js",
     "test": "node --test backend/test/*.test.js"
   },

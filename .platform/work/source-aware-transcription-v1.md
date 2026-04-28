@@ -25,9 +25,9 @@ _Metadata rules: `stream_id` must be `stream-<slug>`, `slug` must match the file
 - Out of scope: cloud-only transcription, full arrangement generation, polished UI redesign, installer/notarization, and claiming production-grade accuracy before verification.
 
 ## Done criteria
-- [ ] A documented local transcription approach is selected with tradeoffs and dependency implications.
-- [ ] Bass extraction output is measurably more musically useful than the current heuristic on at least one controlled fixture and the provided MP3 smoke case.
-- [ ] Result contract distinguishes source-aware transcription from heuristic or generated sketch output.
+- [x] A documented local transcription approach is selected with tradeoffs and dependency implications.
+- [x] Bass extraction output is measurably more musically useful than the current heuristic on at least one controlled fixture and the provided MP3 smoke case.
+- [x] Result contract distinguishes source-aware transcription from heuristic or generated sketch output.
 - [ ] Tests pass: `python3 -m unittest analysis/test_feature_extraction.py`, `npm test`, Python compile check, Node syntax checks, and JUCE Debug build if client output changes.
 - [ ] Manual verification documents behavior on the provided fake-music MP3 and at least one synthetic fixture.
 - [ ] `.platform/memory/log.md` appended
@@ -37,20 +37,25 @@ _Metadata rules: `stream_id` must be `stream-<slug>`, `slug` must match the file
 _Append-only. Format: `2026-04-28 — <decision> — <rationale>`_
 
 - 2026-04-28 — Start from the audio-intelligence-v1 contract — Existing outputs are honest and tested; this stream should improve transcription accuracy without breaking the plugin/backend shape.
+- 2026-04-28 — Use optional Basic Pitch first — It provides a real local audio-to-MIDI model now while leaving source separation and mandatory dependencies for later.
 
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
 - **Last updated:** 2026-04-28 by codex
-- **What just happened:** Closed `audio-intelligence-v1` and opened this stream.
-- **Current focus:** Research source-aware local transcription options and pick the narrow implementation path.
-- **Next action:** Compare Basic Pitch-style local inference, stem separation plus pitch tracking, and lightweight Python-only heuristics against project constraints.
+- **What just happened:** Committed model-backed MIDI transcription.
+- **Current focus:** User manual QA in the standalone app.
+- **Next action:** Run `npm run dev:refresh`, analyze `tmp/test-audio/smells-like-teen-spirit-fake-music.mp3`, and audition the model MIDI files.
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `2026-04-28 HH:MM — <what happened>`._
 
+2026-04-28 15:13 — (auto) Add model-backed MIDI transcription
+
 2026-04-28 14:11 — (auto) Close audio intelligence stream
+
+2026-04-28 15:20 — Added optional Basic Pitch model transcription. Real MP3 smoke produced `model-transcription.mid`, `model-bass-transcription.mid`, `reference-sketch.mid`, and heuristic `bass-transcription.mid`; BPM now normalizes half-time 60 to producer-facing 120 with low confidence.
 
 2026-04-28 14:15 — Created stream for the next accuracy step: source-aware transcription beyond the experimental full-mix bass tracker.
 

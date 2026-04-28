@@ -21,7 +21,8 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
   - `GET /status`
   - `GET /result`
 - Node owns job queue/state, MP3/WAV boundary validation, FFmpeg MP3 decoding, Python process invocation, deterministic prompt generation, and result aggregation.
-- Node passes through multiple MIDI asset paths from Python, including the generated reference sketch and optional experimental bass transcription.
+- Node passes through `midi_files` and structured `midi_assets` from Python, including generated sketches, optional model transcription, and heuristic fallbacks.
+- Development scripts include `npm run dev:refresh` for rebuild + backend restart + live logs and `npm run setup:transcription` for the optional Basic Pitch engine.
 - WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 
@@ -36,7 +37,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - Requests identify local audio files and/or prompt text.
 - Long jobs return a job id quickly.
 - Status endpoint must represent queued/running/succeeded/failed/cancelled states.
-- Result endpoint returns analysis JSON, generated prose/prompt, and local MIDI asset paths when available. Clients must tolerate optional MIDI files because deeper extraction is capability-dependent.
+- Result endpoint returns analysis JSON, generated prose/prompt, local MIDI asset paths, and structured MIDI metadata when available. Clients must tolerate optional MIDI files because deeper extraction is capability-dependent.
 
 ## Key files
 

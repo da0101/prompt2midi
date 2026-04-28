@@ -100,6 +100,7 @@ function createApp(options = {}) {
 
 async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
   jobs.update(jobId, { status: 'running', progress: 10, message: 'Preparing local analysis.' });
+  console.log(`[job ${jobId}] started${input.audioPath ? ` audio=${input.audioPath}` : ' prompt-only'}`);
 
   try {
     let analysisPayload;
@@ -127,9 +128,11 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
         analysis: analysisPayload.analysis,
         interpretation,
         midi_files: analysisPayload.midi_files || {},
+        midi_assets: analysisPayload.midi_assets || [],
         midi_notes: analysisPayload.midi_notes || []
       }
     });
+    console.log(`[job ${jobId}] succeeded`);
   } catch (error) {
     jobs.update(jobId, {
       status: 'failed',
@@ -137,6 +140,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       message: 'Analysis failed.',
       error: normalizeError(error)
     });
+    console.error(`[job ${jobId}] failed`, error && (error.stack || error.message || error));
   }
 }
 

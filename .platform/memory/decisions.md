@@ -27,6 +27,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 6 | 2026-04-28 | First backend slice | Use dependency-free Node stdlib HTTP/job orchestration and Python stdlib WAV analysis for the first vertical slice. | It proves the end-to-end contract immediately and keeps FastAPI/MP3/model choices reversible. | Introducing framework and decoder dependencies before the API and result contract are stable. |
 | 7 | 2026-04-28 | MP3 input | Use FFmpeg as the MP3 boundary adapter and keep Python analysis WAV-only. | FFmpeg handles decoding locally without forcing Python audio dependencies into the analysis core. | Requiring users to pre-convert MP3s; adding a Python decoder dependency before deeper analysis is designed. |
 | 8 | 2026-04-28 | MIDI truthfulness | Expose heuristic bass tracking only as experimental `bass-transcription.mid` and keep `reference-sketch.mid` separate. | The user needs useful MIDI exports, but full-mix low-frequency tracking is not source-separated transcription. | Renaming the sketch to imply accuracy; hiding the experimental file behind the same label. |
+| 9 | 2026-04-28 | Model MIDI transcription | Use Basic Pitch as an optional isolated local engine for first-pass model MIDI transcription. | It provides a real audio-to-MIDI model without cloud APIs and can be installed separately from the dependency-free analyzer. | Pretending stdlib heuristics are final; making Basic Pitch mandatory for the baseline backend. |
 
 ---
 
@@ -38,6 +39,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 2 | 2026-04-28 | Repo split | Node and Python can start in this repo; split is undecided. | When backend/analysis code becomes large enough to need separate release/versioning. |
 | 3 | 2026-04-28 | First plugin format | AU/VST3/standalone release order is undecided. | Before packaging or Ableton acceptance testing. |
 | 4 | 2026-04-28 | Cloud API framework | Public cloud API may stay Node or move to FastAPI; endpoint contract should remain stable either way. | Before cloud deployment/auth/audio upload design. |
+| 5 | 2026-04-28 | Stem-aware transcription | Source separation strategy remains undecided. | Before claiming source-separated bass, drums, chords, or melody. |
 
 ---
 

@@ -19,7 +19,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - Source files currently live in `Source/PluginProcessor.*`, `Source/PluginEditor.*`, `Source/LocalApiClient.h`, and `Source/ModernTheme.h`.
 - `Prompt2midiAudioProcessor` is intentionally pass-through audio processing for the MVP.
 - `Prompt2midiAudioProcessorEditor` owns WAV/MP3 choose/drop, prompt input, async local API polling, result display, and copy prompt.
-- `LocalApiClient.h` labels MIDI assets by confidence level: reference sketch is not transcription, and bass transcription is experimental when present.
+- `LocalApiClient.h` labels MIDI assets by confidence level and limitations: reference sketch is generated, model MIDI is Basic Pitch output, and heuristic bass is full-mix tracking.
 - The plugin should call a local API for long-running work rather than doing analysis inside the plugin.
 - Keep host/audio-thread stability as the primary invariant.
 
@@ -33,7 +33,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 
 - Plugin submits local file paths/prompts to the local orchestrator.
 - Plugin polls or subscribes to job progress rather than blocking.
-- Plugin displays structured JSON fields and generated text/assets from Node.
+- Plugin displays structured JSON fields, generated text/assets, analysis warnings, and `midi_assets` metadata from Node.
 - Plugin output copy must not imply full transcription accuracy unless the backend exposes a source-aware extraction result.
 - Do not require cloud credentials in the plugin for the core path.
 

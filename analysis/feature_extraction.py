@@ -179,10 +179,16 @@ def estimate_tempo(energy_curve: list[dict]) -> dict:
         return {"bpm": None, "confidence": 0.0, "warnings": ["BPM estimate unavailable for this reference."]}
 
     confidence = 0.0 if total_score <= 0.0 else min(0.72, max(0.2, best_score / total_score * 8.0))
+    bpm = 60.0 / (best_lag * step_seconds)
+    warnings = ["BPM estimate uses simple onset autocorrelation and should be treated as approximate."]
+    if 60.0 <= bpm < 85.0:
+        bpm *= 2.0
+        confidence = min(0.62, confidence + 0.08)
+        warnings.append("Tempo was normalized to the double-time producer BPM because the raw estimate looked half-time.")
     return {
-        "bpm": round(60.0 / (best_lag * step_seconds), 2),
+        "bpm": round(bpm, 2),
         "confidence": round(confidence, 2),
-        "warnings": ["BPM estimate uses simple onset autocorrelation and should be treated as approximate."],
+        "warnings": warnings,
     }
 
 

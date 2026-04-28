@@ -29,6 +29,7 @@ JuceLibraryCode/
 __pycache__/
 *.py[cod]
 *.pyo
+.venv*/
 
 
 # prompt2midi local runtime

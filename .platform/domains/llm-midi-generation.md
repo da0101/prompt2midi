@@ -18,7 +18,7 @@ This domain covers turning structured musical analysis and user prompts into pro
 
 - MVP prompt generation is deterministic Node code that takes structured JSON from Python via Node.
 - It returns producer insights and AI-generation prompts.
-- MIDI generation writes a simple local `reference-sketch.mid`; analysis can also attach an experimental `bass-transcription.mid` when low-frequency tracking finds notes.
+- MIDI generation writes a simple local `reference-sketch.mid`; analysis can also attach Basic Pitch `model-transcription.mid`, pitch-filtered `model-bass-transcription.mid`, and experimental `bass-transcription.mid`.
 - Prompting should be deterministic and based on structured inputs, not vague free text.
 
 ## Frontend / clients
@@ -34,7 +34,8 @@ This domain covers turning structured musical analysis and user prompts into pro
   - genre/style breakdown
   - AI-generation prompt
 - MIDI output must not be presented as transcription unless the extraction engine actually supports it.
-- Current MIDI output includes `reference_sketch` plus notes explaining that it is generated from estimated BPM/key. It may also include `bass_transcription`, which must be labeled as experimental monophonic low-frequency tracking.
+- Current MIDI output includes `reference_sketch` plus structured `midi_assets` explaining kind, method, confidence, and limitations. Model MIDI must still warn that full-mix transcription needs ear correction.
+- Low-confidence BPM/key must be phrased as possible/unverified, not as firm producer facts.
 - The local workflow cannot require external AI APIs.
 
 ## Key files
@@ -42,6 +43,7 @@ This domain covers turning structured musical analysis and user prompts into pro
 - `promt.md`
 - `backend/lib/promptGenerator.js`
 - `analysis/midi_extraction.py`
+- `analysis/source_transcription.py`
 - `Source/LocalApiClient.h`
 - Planned: local LLM runtime integration
 - Planned: source-aware melody/chord/bass extraction modules

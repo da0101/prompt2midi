@@ -16,10 +16,10 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 ## Backend / source of truth
 
-- Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, `analysis/midi_extraction.py`, and `analysis/bass_transcription.py`.
-- Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, a `reference-sketch.mid` path, and optional experimental `bass-transcription.mid`.
+- Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, `analysis/midi_extraction.py`, `analysis/bass_transcription.py`, and `analysis/source_transcription.py`.
+- Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, a `reference-sketch.mid` path, optional Basic Pitch model MIDI, and optional experimental `bass-transcription.mid`.
 - Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
-- Later phases: section segmentation, stem/instrument analysis, chord progression, and production-grade melody/bass MIDI extraction.
+- Later phases: section segmentation, stem/instrument analysis, chord progression, stem-aware bass cleanup, and production-grade melody/bass MIDI extraction.
 - Python should return structured JSON only; interpretation/prose belongs to Node/LLM.
 
 ## Frontend / clients
@@ -47,6 +47,7 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - `analysis/bass_transcription.py`
 - `analysis/feature_extraction.py`
 - `analysis/midi_extraction.py`
+- `analysis/source_transcription.py`
 - `analysis/test_feature_extraction.py`
 - Planned: `analysis/segmentation.py`
 
@@ -56,3 +57,4 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - Start with basic but useful analysis before stems/chords/MIDI.
 - Use deterministic outputs for tests and LLM prompts.
 - Treat large audio files as normal input; design for progress and memory limits.
+- Basic Pitch is an optional isolated engine; dependency-free analysis must still work when it is absent.
