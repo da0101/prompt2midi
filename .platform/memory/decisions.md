@@ -26,6 +26,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 5 | 2026-04-28 | Threading boundary | Heavy work must stay out of JUCE `processBlock` and the audio thread. | Ableton plugin stability depends on non-blocking processing. | Running analysis, HTTP, subprocesses, or file-heavy logic in audio callbacks. |
 | 6 | 2026-04-28 | First backend slice | Use dependency-free Node stdlib HTTP/job orchestration and Python stdlib WAV analysis for the first vertical slice. | It proves the end-to-end contract immediately and keeps FastAPI/MP3/model choices reversible. | Introducing framework and decoder dependencies before the API and result contract are stable. |
 | 7 | 2026-04-28 | MP3 input | Use FFmpeg as the MP3 boundary adapter and keep Python analysis WAV-only. | FFmpeg handles decoding locally without forcing Python audio dependencies into the analysis core. | Requiring users to pre-convert MP3s; adding a Python decoder dependency before deeper analysis is designed. |
+| 8 | 2026-04-28 | MIDI truthfulness | Expose heuristic bass tracking only as experimental `bass-transcription.mid` and keep `reference-sketch.mid` separate. | The user needs useful MIDI exports, but full-mix low-frequency tracking is not source-separated transcription. | Renaming the sketch to imply accuracy; hiding the experimental file behind the same label. |
 
 ---
 

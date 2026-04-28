@@ -5,7 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
-| audio-intelligence-v1 | feature | in-progress | codex | 2026-04-28 |
+| source-aware-transcription-v1 | feature | in-progress | codex | 2026-04-28 |
 
 ---
 

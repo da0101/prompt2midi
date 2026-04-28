@@ -8,6 +8,7 @@ _Live hypotheses and unresolved questions. Appended during `ab close <slug>` whe
 
 <!-- agentboard:open-questions:active:begin -->
 <!-- Format: `- YYYY-MM-DD — [domain] question (context)` -->
+- 2026-04-28 — [audio-analysis] Which source-aware transcription approach should replace heuristic full-mix bass tracking first: Basic Pitch-style model, stem separation plus pitch tracking, or a custom local pipeline?
 - 2026-04-28 — [llm-midi-generation] Which local LLM runtime/model should replace the deterministic MVP prompt generator first?
 - 2026-04-28 — [local-orchestration] Should cloud deployment keep Node as the orchestration gateway or introduce FastAPI as the public API layer?
 <!-- agentboard:open-questions:active:end -->

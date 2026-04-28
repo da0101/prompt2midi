@@ -4,36 +4,35 @@
 > 30-second orientation: what we're building, why, and where we stand.
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
-**Feature:** audio-intelligence-v1
-**Status:** planning
-**Stream file:** `work/audio-intelligence-v1.md`
+**Feature:** source-aware-transcription-v1
+**Status:** in-progress
+**Stream file:** `work/source-aware-transcription-v1.md`
 
 ---
 
 ## What we're building
 
-Audio-intelligence v1 improves the musical usefulness of the MVP pipeline. The first vertical slice proved the JUCE → Node → Python → MIDI/result contract; this stream makes the analysis and MIDI behavior less misleading and more useful on real reference tracks.
+Build the next accuracy step after `audio-intelligence-v1`: a source-aware transcription path that can outperform the current full-mix bass heuristic. The goal is not a polished UI; it is a materially better local MIDI extraction foundation with honest labels and tests.
 
 ## Why
 
-The current `bassline.mid` is only a deterministic placeholder sketch, and the user has already flagged that it is far from the reference track. Before adding polish, the product needs honest, testable music intelligence and clear limits.
+The user already caught that generated/heuristic MIDI can be far from the reference track. The product needs a credible path from real audio reference to editable Ableton MIDI, while staying local-first and clear about confidence.
 
 ## What done looks like
 
-- Placeholder MIDI is either removed/relabelled or replaced with a tested first extraction path.
-- BPM/key/energy outputs have confidence/warnings backed by fixtures.
-- MP3 support is implemented or explicitly deferred with a chosen decoder path.
-- Existing backend/Python/JUCE build gates stay green.
+- A local transcription approach is selected with documented tradeoffs.
+- Bass extraction becomes more musically useful than the current heuristic on fixtures and the provided MP3 smoke case.
+- The backend/JUCE result contract keeps generated sketches, heuristic output, and source-aware transcription clearly separated.
 
 ## Architecture decisions locked
 
-- Keep the local-first Node/Python/JUCE contract from `vertical-slice-mvp`.
-- Do not require cloud APIs for the core workflow.
-- Do not present generated MIDI as transcription unless the analysis actually supports it.
+- Keep the existing JUCE → Node → Python contract from the previous streams.
+- Core workflow stays local-first; no mandatory cloud APIs.
+- Do not present MIDI as source-aware transcription unless the extraction path actually supports that claim.
 
 ## Current state
 
-The MVP can submit prompt/WAV jobs, run dependency-free Python WAV analysis, generate deterministic producer prompts, and write a simple bassline MIDI sketch. The next work is accuracy and product honesty, not a UI redesign.
+The repo now supports prompt/WAV/MP3 jobs, FFmpeg MP3 decoding, BPM/key confidence, `reference-sketch.mid`, and optional experimental `bass-transcription.mid`. The remaining accuracy gap is source-aware extraction: separating or modeling musical parts before producing MIDI.
 
 See `work/ACTIVE.md` for stream status.
 
@@ -49,14 +48,16 @@ See `work/ACTIVE.md` for stream status.
 - `.platform/domains/juce-plugin.md` — relevant domain for this stream
 
 
-**Do not load:** `.platform/work/archive/*` unless explicitly auditing the closed MVP.
+**Do not load:** `.platform/work/archive/*` unless auditing a closed stream.
 **Never load:** `work/archive/*`
 
 ## Key files
 
+- `analysis/bass_transcription.py`
 - `analysis/feature_extraction.py`
 - `analysis/midi_extraction.py`
-- `backend/server.js`
+- `analysis/analyze.py`
+- `backend/lib/pythonRunner.js`
 - `backend/lib/promptGenerator.js`
-- `backend/test/server.test.js`
+- `Source/LocalApiClient.h`
 - `docs/manual-verification.md`

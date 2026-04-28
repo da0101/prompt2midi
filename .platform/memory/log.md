@@ -5,7 +5,10 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
-- 2026-04-28 — commit `625a780`: Add experimental bass transcription — auto-logged
+- 2026-04-28 — commit: Close audio intelligence stream — auto-logged
+
+2026-04-28 — closed stream audio-intelligence-v1 → ./.platform/work/archive/audio-intelligence-v1.md (by danilulmashev)
+- 2026-04-28 — commit `843c3dc`: Add experimental bass transcription — auto-logged
 - 2026-04-28 — audio-intelligence-v1 bass transcription — added experimental monophonic low-frequency tracking and `bass-transcription.mid` output — better than the old sketch, but still not source-separated transcription.
 - 2026-04-28 — commit `ecb4501`: Implement audio intelligence v1 — auto-logged
 - 2026-04-28 — audio-intelligence-v1 implementation — added FFmpeg MP3 boundary decoding, confidence metadata, and honest `reference-sketch.mid` labeling — generated MIDI is now explicitly framed as a sketch, not transcription.
