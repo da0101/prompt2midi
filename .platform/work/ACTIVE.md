@@ -5,6 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
+| audio-intelligence-v1 | feature | planning | codex | 2026-04-28 |
 
 ---
 
