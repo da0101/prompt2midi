@@ -28,28 +28,31 @@ _Metadata rules: `stream_id` must be `stream-<slug>`, `slug` must match the file
 - [x] A documented local transcription approach is selected with tradeoffs and dependency implications.
 - [x] Bass extraction output is measurably more musically useful than the current heuristic on at least one controlled fixture and the provided MP3 smoke case.
 - [x] Result contract distinguishes source-aware transcription from heuristic or generated sketch output.
-- [ ] Tests pass: `python3 -m unittest analysis/test_feature_extraction.py`, `npm test`, Python compile check, Node syntax checks, and JUCE Debug build if client output changes.
-- [ ] Manual verification documents behavior on the provided fake-music MP3 and at least one synthetic fixture.
-- [ ] `.platform/memory/log.md` appended
-- [ ] `decisions.md` updated if any architectural choices were made
+- [x] Tests pass: `python3 -m unittest analysis/test_feature_extraction.py`, `npm test`, Python compile check, Node syntax checks, and JUCE Debug build if client output changes.
+- [x] Manual verification documents behavior on the provided fake-music MP3 and at least one synthetic fixture.
+- [x] `.platform/memory/log.md` appended
+- [x] `decisions.md` updated if any architectural choices were made
 
 ## Key decisions
 _Append-only. Format: `2026-04-28 — <decision> — <rationale>`_
 
 - 2026-04-28 — Start from the audio-intelligence-v1 contract — Existing outputs are honest and tested; this stream should improve transcription accuracy without breaking the plugin/backend shape.
 - 2026-04-28 — Use optional Basic Pitch first — It provides a real local audio-to-MIDI model now while leaving source separation and mandatory dependencies for later.
+- 2026-04-28 — Use optional Demucs bass stems before Basic Pitch bass MIDI — It adds a real source-aware path while keeping dependency-free and full-mix fallback behavior.
 
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-04-28 by codex
-- **What just happened:** Added visual pipeline logging for backend analysis jobs.
-- **Current focus:** User manual QA in the standalone app.
-- **Next action:** Run `npm run dev:refresh`, analyze `tmp/test-audio/smells-like-teen-spirit-fake-music.mp3`, and watch terminal stages/logs.
+- **Last updated:** 2026-04-28 by danilulmashev (auto)
+- **What just happened:** (auto) 08eebd4: Add stem-aware bass transcription
+- **Current focus:** —
+- **Next action:** (auto-saved from commit — update next action manually)
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `2026-04-28 HH:MM — <what happened>`._
+
+2026-04-28 16:14 — (auto) 08eebd4: Add stem-aware bass transcription
 
 2026-04-28 15:38 — (auto) Add visual pipeline logging
 

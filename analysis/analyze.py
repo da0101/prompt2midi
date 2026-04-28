@@ -11,7 +11,8 @@ import sys
 from bass_transcription import transcribe_bassline
 from feature_extraction import AnalysisError, analyze_wav
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
-from source_transcription import transcribe_with_model
+from source_transcription import can_run_model_transcription, transcribe_with_model
+from stem_separation import separate_for_transcription
 
 
 def run(audio_path: str, output_dir: str) -> dict:
@@ -38,7 +39,8 @@ def run(audio_path: str, output_dir: str) -> dict:
         }
     ]
 
-    model = transcribe_with_model(audio_path, output_dir, analysis.get("bpm"))
+    stems = separate_for_transcription(audio_path, output_dir) if can_run_model_transcription() else _skipped_stems()
+    model = transcribe_with_model(audio_path, output_dir, analysis.get("bpm"), stems)
     for track in model["tracks"]:
         midi_files[track["key"]] = track["path"]
         midi_assets.append(
@@ -46,12 +48,15 @@ def run(audio_path: str, output_dir: str) -> dict:
                 "key": track["key"],
                 "path": track["path"],
                 "label": track["label"],
-                "kind": "model_transcription",
+                "kind": track.get("kind", "model_transcription"),
                 "is_transcription": True,
-                "source_method": model["method"],
+                "source_method": track.get("source_method") or model["method"],
                 "confidence": track["confidence"],
                 "note_count": track["note_count"],
                 "limitations": track["limitations"],
+                "source_audio": track.get("source_audio"),
+                "source_stem": track.get("source_stem"),
+                "source_stage": track.get("source_stage", "full_mix"),
             }
         )
 
@@ -87,6 +92,13 @@ def run(audio_path: str, output_dir: str) -> dict:
         "track_count": len(model["tracks"]),
         "warnings": model["warnings"],
     }
+    analysis["stem_separation"] = {
+        "available": stems["available"],
+        "method": stems["method"],
+        "stems": sorted((stems.get("stems") or {}).keys()),
+        "paths": stems.get("stems") or {},
+        "warnings": stems["warnings"],
+    }
     return {
         "ok": True,
         "analysis": analysis,
@@ -95,6 +107,7 @@ def run(audio_path: str, output_dir: str) -> dict:
         "midi_notes": [
             "reference-sketch.mid is generated from estimated BPM/key only.",
             "model-transcription.mid is produced by Basic Pitch when the local engine is installed.",
+            "source-bass-transcription.mid is produced from a separated bass stem when Demucs and Basic Pitch are installed.",
             "model-bass-transcription.mid is pitch-filtered model output, not source-separated bass.",
             "bass-transcription.mid is legacy experimental monophonic low-frequency tracking when present.",
         ],
@@ -117,6 +130,15 @@ def main() -> int:
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True))
     sys.stdout.write("\n")
     return 0 if payload["ok"] else 2
+
+
+def _skipped_stems() -> dict:
+    return {
+        "available": False,
+        "method": "skipped",
+        "stems": {},
+        "warnings": ["Stem separation skipped because model transcription is disabled or Basic Pitch is not installed."],
+    }
 
 
 if __name__ == "__main__":

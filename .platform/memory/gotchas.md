@@ -15,6 +15,7 @@ Format: `🔴 [domain or file] — one-line gotcha (incident date if applicable)
 
 <!-- agentboard:gotchas:begin -->
 <!-- New entries go below, newest first. Keep entries to one line each. -->
+- 🟡 [audio-analysis] — Demucs/torchaudio 2.11 needs `torchcodec` installed and `TORCH_HOME` pointed at a writable project cache before it can save stems (2026-04-28).
 - 🟡 [audio-analysis] — Basic Pitch on macOS/CoreML needs `TMPDIR` pointed at a writable project temp dir; sandboxed `/var/folders/.../T` can fail model compilation (2026-04-28).
 - 🟡 [audio-analysis] — `model-bass-transcription.mid` is pitch-filtered model output from the full mix, not stem-separated bass (2026-04-28).
 - 🟡 [audio-analysis] — `bass-transcription.mid` is experimental monophonic low-frequency tracking from the full mix, not source-separated or production-grade transcription (2026-04-28).

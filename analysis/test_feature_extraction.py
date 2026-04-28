@@ -13,6 +13,7 @@ from analyze import run as run_analysis
 from bass_transcription import transcribe_bassline
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from source_transcription import _extract_bassline, transcribe_with_model
+from stem_separation import separate_for_transcription
 
 
 class FeatureExtractionTest(unittest.TestCase):
@@ -66,7 +67,9 @@ class FeatureExtractionTest(unittest.TestCase):
 
     def test_full_analysis_labels_generated_and_heuristic_midi_assets(self):
         old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
+        old_disable_stems = os.environ.get("PROMPT2MIDI_DISABLE_STEMS")
         os.environ["PROMPT2MIDI_DISABLE_MODEL"] = "1"
+        os.environ["PROMPT2MIDI_DISABLE_STEMS"] = "1"
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 wav_path = os.path.join(temp_dir, "pulse.wav")
@@ -78,6 +81,10 @@ class FeatureExtractionTest(unittest.TestCase):
                 os.environ.pop("PROMPT2MIDI_DISABLE_MODEL", None)
             else:
                 os.environ["PROMPT2MIDI_DISABLE_MODEL"] = old_disable
+            if old_disable_stems is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_STEMS", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_STEMS"] = old_disable_stems
 
         assets = {asset["key"]: asset for asset in result["midi_assets"]}
         self.assertFalse(assets["reference_sketch"]["is_transcription"])
@@ -85,6 +92,7 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("bass_transcription", assets)
         self.assertEqual(assets["bass_transcription"]["source_method"], "full_mix_low_frequency_tracking")
         self.assertFalse(result["analysis"]["model_transcription"]["available"])
+        self.assertFalse(result["analysis"]["stem_separation"]["available"])
 
     def test_model_transcription_can_be_explicitly_disabled(self):
         old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
@@ -99,6 +107,88 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertFalse(result["available"])
         self.assertIn("disabled", result["warnings"][0])
+
+    def test_stem_separation_can_be_explicitly_disabled(self):
+        old_disable = os.environ.get("PROMPT2MIDI_DISABLE_STEMS")
+        os.environ["PROMPT2MIDI_DISABLE_STEMS"] = "1"
+        try:
+            result = separate_for_transcription("unused.wav", "/tmp")
+        finally:
+            if old_disable is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_STEMS", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_STEMS"] = old_disable
+
+        self.assertFalse(result["available"])
+        self.assertEqual(result["method"], "disabled")
+        self.assertIn("disabled", result["warnings"][0])
+
+    def test_missing_stem_engine_returns_warning_without_failing(self):
+        old_disable = os.environ.get("PROMPT2MIDI_DISABLE_STEMS")
+        old_engine = os.environ.get("PROMPT2MIDI_DEMUCS")
+        old_engine_alt = os.environ.get("PROMPT2MIDI_STEM_ENGINE")
+        os.environ.pop("PROMPT2MIDI_DISABLE_STEMS", None)
+        os.environ["PROMPT2MIDI_DEMUCS"] = "/definitely/not/demucs"
+        os.environ.pop("PROMPT2MIDI_STEM_ENGINE", None)
+        try:
+            result = separate_for_transcription("unused.wav", "/tmp")
+        finally:
+            if old_disable is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_STEMS", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_STEMS"] = old_disable
+            if old_engine is None:
+                os.environ.pop("PROMPT2MIDI_DEMUCS", None)
+            else:
+                os.environ["PROMPT2MIDI_DEMUCS"] = old_engine
+            if old_engine_alt is None:
+                os.environ.pop("PROMPT2MIDI_STEM_ENGINE", None)
+            else:
+                os.environ["PROMPT2MIDI_STEM_ENGINE"] = old_engine_alt
+
+        self.assertFalse(result["available"])
+        self.assertIn("not installed", result["warnings"][0])
+
+    def test_model_transcription_uses_bass_stem_when_available(self):
+        old_engine = os.environ.get("PROMPT2MIDI_BASIC_PITCH")
+        old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                fake_engine = os.path.join(temp_dir, "fake-basic-pitch")
+                calls_path = os.path.join(temp_dir, "calls.txt")
+                self._write_fake_basic_pitch(fake_engine, calls_path)
+                os.environ["PROMPT2MIDI_BASIC_PITCH"] = fake_engine
+                os.environ.pop("PROMPT2MIDI_DISABLE_MODEL", None)
+
+                mix_path = os.path.join(temp_dir, "mix.wav")
+                stem_path = os.path.join(temp_dir, "bass.wav")
+                self._write_pulsed_wav(mix_path, bpm=120)
+                self._write_bass_pattern_wav(stem_path)
+
+                result = transcribe_with_model(
+                    mix_path,
+                    os.path.join(temp_dir, "job"),
+                    bpm=120,
+                    stem_result={"available": True, "method": "demucs_htdemucs", "stems": {"bass": stem_path}, "warnings": []},
+                )
+                with open(calls_path) as call_file:
+                    calls = call_file.read()
+        finally:
+            if old_engine is None:
+                os.environ.pop("PROMPT2MIDI_BASIC_PITCH", None)
+            else:
+                os.environ["PROMPT2MIDI_BASIC_PITCH"] = old_engine
+            if old_disable is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_MODEL", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_MODEL"] = old_disable
+
+        tracks = {track["key"]: track for track in result["tracks"]}
+        self.assertTrue(result["available"])
+        self.assertIn("source_bass_transcription", tracks)
+        self.assertEqual(tracks["source_bass_transcription"]["kind"], "source_aware_transcription")
+        self.assertEqual(tracks["source_bass_transcription"]["source_stem"], "bass")
+        self.assertIn(stem_path, calls)
 
     def test_model_bass_filter_keeps_one_low_note_per_time_bin(self):
         events = [
@@ -150,6 +240,30 @@ class FeatureExtractionTest(unittest.TestCase):
             wav_file.setsampwidth(2)
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    @staticmethod
+    def _write_fake_basic_pitch(path: str, calls_path: str):
+        script = f"""#!/usr/bin/env python3
+import csv
+import os
+import sys
+
+out_dir = sys.argv[1]
+audio_path = sys.argv[2]
+os.makedirs(out_dir, exist_ok=True)
+with open({calls_path!r}, "a") as calls:
+    calls.write(audio_path + "\\n")
+with open(os.path.join(out_dir, "fake.mid"), "wb") as midi:
+    midi.write(b"MThd" + bytes(18))
+with open(os.path.join(out_dir, "fake.csv"), "w", newline="") as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=["start_time_s", "end_time_s", "pitch_midi", "velocity"])
+    writer.writeheader()
+    writer.writerow({{"start_time_s": "0.0", "end_time_s": "0.4", "pitch_midi": "43", "velocity": "80"}})
+    writer.writerow({{"start_time_s": "0.5", "end_time_s": "0.9", "pitch_midi": "47", "velocity": "75"}})
+"""
+        with open(path, "w") as script_file:
+            script_file.write(script)
+        os.chmod(path, 0o755)
 
 
 if __name__ == "__main__":

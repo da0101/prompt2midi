@@ -5,6 +5,8 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-04-28 — commit `08eebd4`: Add stem-aware bass transcription — auto-logged
+- 2026-04-28 — source-aware-transcription-v1 stem pass — added optional Demucs bass-stem separation feeding Basic Pitch and verified real MP3 output with `source-bass-transcription.mid` — stem-aware MIDI now exists locally but still needs musical QA by ear.
 - 2026-04-28 — commit: Add visual pipeline logging — auto-logged
 - 2026-04-28 — dev pipeline logging — added color-coded backend analysis stages with warnings, MIDI paths, note counts, and timings — `npm run dev:refresh` now shows what the pipeline is doing during manual QA.
 - 2026-04-28 — commit: Add model-backed MIDI transcription — auto-logged

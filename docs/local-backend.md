@@ -14,6 +14,12 @@ For local model MIDI transcription, install the isolated Basic Pitch engine:
 npm run setup:transcription
 ```
 
+For optional stem-aware bass transcription, install the isolated Demucs engine:
+
+```bash
+npm run setup:stems
+```
+
 For everyday plugin testing with live backend logs:
 
 ```bash
@@ -55,7 +61,16 @@ MIDI outputs:
 
 - `reference-sketch.mid` is always generated from estimated BPM/key and is not transcription.
 - `model-transcription.mid` is written when the Basic Pitch engine is installed. It is model MIDI from the supplied mix and should still be corrected by ear.
+- `source-bass-transcription.mid` is written when both Demucs and Basic Pitch are installed. Demucs first separates a bass stem, then Basic Pitch transcribes that stem. It is usually more useful than full-mix bass filtering, but still needs ear correction because separated stems can contain bleed.
 - `model-bass-transcription.mid` is a pitch-range filtered bass candidate from model notes. It is not stem-separated bass.
 - `bass-transcription.mid` is written when experimental monophonic low-frequency tracking finds note events. Treat it as a legacy heuristic fallback, not a finished extraction.
 
 The result also includes `midi_assets`, a structured list with `kind`, `source_method`, confidence, note count, and limitations for each MIDI file.
+
+Optional engines are capability-gated:
+
+- `PROMPT2MIDI_DISABLE_MODEL=1` disables Basic Pitch.
+- `PROMPT2MIDI_BASIC_PITCH=/path/to/basic-pitch` overrides Basic Pitch discovery.
+- `PROMPT2MIDI_DISABLE_STEMS=1` disables Demucs.
+- `PROMPT2MIDI_DEMUCS=/path/to/demucs` overrides Demucs discovery.
+- `PROMPT2MIDI_STEM_TIMEOUT_SECONDS=360` controls Demucs timeout.

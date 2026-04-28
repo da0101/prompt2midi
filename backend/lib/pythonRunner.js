@@ -65,7 +65,13 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
       if (log) {
         log.done('02.2 python engine', summarizePayload(payload));
         for (const warning of analysis.warnings || []) log.warn(warning);
+        for (const warning of (analysis.stem_separation && analysis.stem_separation.warnings) || []) log.warn(warning);
         for (const warning of (analysis.model_transcription && analysis.model_transcription.warnings) || []) log.warn(warning);
+        const stems = analysis.stem_separation || {};
+        if (stems.method) {
+          const stemNames = Array.isArray(stems.stems) && stems.stems.length > 0 ? stems.stems.join(',') : 'none';
+          log.info(`stem separation: ${stems.available ? 'on' : 'off'} method=${stems.method} stems=${stemNames}`);
+        }
         for (const asset of payload.midi_assets || []) {
           log.info(`${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
         }
@@ -100,8 +106,9 @@ function streamPythonLog(text, log) {
 function summarizePayload(payload) {
   const analysis = payload.analysis || {};
   const model = analysis.model_transcription || {};
+  const stems = analysis.stem_separation || {};
   const files = Object.keys(payload.midi_files || {}).length;
-  return `bpm=${analysis.bpm || 'unknown'} key=${analysis.key || 'unknown'} model=${model.available ? 'on' : 'off'} midi=${files}`;
+  return `bpm=${analysis.bpm || 'unknown'} key=${analysis.key || 'unknown'} stems=${stems.available ? 'on' : 'off'} model=${model.available ? 'on' : 'off'} midi=${files}`;
 }
 
 module.exports = { runAnalysis };
