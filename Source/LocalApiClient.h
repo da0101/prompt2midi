@@ -91,6 +91,10 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
         auto sketchPath = midiObject->getProperty ("reference_sketch").toString();
         if (sketchPath.isNotEmpty())
             output << "MIDI reference sketch (not transcription):\n" << sketchPath << "\n";
+
+        auto bassPath = midiObject->getProperty ("bass_transcription").toString();
+        if (bassPath.isNotEmpty())
+            output << "\nExperimental bass transcription:\n" << bassPath << "\n";
     }
 
     if (auto* notes = midiNotes.getArray())

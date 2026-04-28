@@ -8,23 +8,41 @@ import json
 import os
 import sys
 
+from bass_transcription import transcribe_bassline
 from feature_extraction import AnalysisError, analyze_wav
-from midi_extraction import write_reference_sketch_midi
+from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 
 
 def run(audio_path: str, output_dir: str) -> dict:
     analysis = analyze_wav(audio_path)
-    midi_path = write_reference_sketch_midi(
+    os.makedirs(output_dir, exist_ok=True)
+
+    sketch_path = write_reference_sketch_midi(
         os.path.join(output_dir, "reference-sketch.mid"),
         key=analysis.get("key") or "C major",
         bpm=analysis.get("bpm") or 120.0,
     )
+    bass = transcribe_bassline(audio_path, analysis.get("bpm"))
+    midi_files = {"reference_sketch": sketch_path}
+    if bass["events"]:
+        midi_files["bass_transcription"] = write_note_events_midi(
+            os.path.join(output_dir, "bass-transcription.mid"),
+            bass["events"],
+            bpm=analysis.get("bpm") or 120.0,
+        )
+
+    analysis["bass_transcription"] = {
+        "event_count": len(bass["events"]),
+        "confidence": bass["confidence"],
+        "warnings": bass["warnings"],
+    }
     return {
         "ok": True,
         "analysis": analysis,
-        "midi_files": {"reference_sketch": midi_path},
+        "midi_files": midi_files,
         "midi_notes": [
-            "Generated from estimated BPM/key only. This is a producer sketch, not source-track transcription."
+            "reference-sketch.mid is generated from estimated BPM/key only.",
+            "bass-transcription.mid is experimental monophonic low-frequency tracking when present.",
         ],
     }
 

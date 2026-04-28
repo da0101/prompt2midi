@@ -15,6 +15,8 @@ Format: `🔴 [domain or file] — one-line gotcha (incident date if applicable)
 
 <!-- agentboard:gotchas:begin -->
 <!-- New entries go below, newest first. Keep entries to one line each. -->
+- 🟡 [audio-analysis] — `bass-transcription.mid` is experimental monophonic low-frequency tracking from the full mix, not source-separated or production-grade transcription (2026-04-28).
+- 🟡 [local-orchestration] — MP3 support depends on FFmpeg being on `PATH` or `PROMPT2MIDI_FFMPEG`; Python still receives WAV (2026-04-28).
 - 🟡 [llm-midi-generation] — `bassline.mid` in the MVP is a deterministic placeholder root pattern, not real track transcription (2026-04-28).
 - 🟡 [audio-analysis] — Phase 1 accepts uncompressed PCM WAV only; MP3 needs an explicit decoder dependency decision before UI/backend support (2026-04-28).
 <!-- agentboard:gotchas:end -->

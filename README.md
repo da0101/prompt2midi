@@ -24,4 +24,4 @@ The backend listens on `http://127.0.0.1:47321` and exposes:
 
 Phase 2 accepts prompt-only jobs plus WAV/WAVE and MP3 references. MP3 input is decoded locally with `ffmpeg` before the Python WAV analyzer runs.
 
-MIDI output is currently a `reference-sketch.mid` generated from estimated BPM/key only. It is not source-track transcription.
+MIDI output always includes `reference-sketch.mid`, generated from estimated BPM/key only. When low-frequency pitch tracking finds usable note events, the job also writes `bass-transcription.mid`; that file is experimental monophonic bass tracking, not full source-track transcription.

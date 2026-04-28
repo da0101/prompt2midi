@@ -91,7 +91,9 @@ describe('prompt2midi local API', () => {
       assert.ok(result.body.result.analysis.bpm_confidence > 0);
       assert.ok(result.body.result.midi_files.reference_sketch.endsWith('reference-sketch.mid'));
       assert.ok(fs.existsSync(result.body.result.midi_files.reference_sketch));
-      assert.match(result.body.result.midi_notes[0], /not source-track transcription/i);
+      assert.ok(result.body.result.midi_files.bass_transcription.endsWith('bass-transcription.mid'));
+      assert.ok(fs.existsSync(result.body.result.midi_files.bass_transcription));
+      assert.match(result.body.result.midi_notes.join(' '), /experimental monophonic/i);
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });

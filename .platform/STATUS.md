@@ -14,7 +14,7 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 | Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV/WAVE/MP3 paths; backend decodes MP3 locally with FFmpeg before Python WAV analysis. |
 | Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free PCM WAV analyzer returns BPM/key estimates with confidence, energy curve, loudness, spectral basics, and warnings. |
 | Node orchestrator | 🔵 Exists | 2026-04-28 | Local stdlib Node API has `/analyze`, `/status`, `/result`, job state, Python bridge, and prompt package generation. |
-| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid` from estimated BPM/key and labels it as a generated sketch, not transcription. Full melody/chord extraction remains pending. |
+| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid` from estimated BPM/key and can also write experimental `bass-transcription.mid` from monophonic low-frequency tracking. Full source separation, melody, and chord extraction remain pending. |
 | Local LLM interpretation | 🔵 Exists | 2026-04-28 | Deterministic local prompt generator turns structured analysis into producer summary and AI music prompt. Real local model runtime remains deferred. |
 | Ableton UX | 🔵 Exists | 2026-04-28 | Functional MVP UI exists and builds as standalone/AU/VST3. It is accepted as temporary; full UI polish and in-host Ableton verification remain follow-ups. |
 
@@ -27,8 +27,8 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 ## Immediate priorities
 
-1. **Decide whether to close audio-intelligence-v1** — MP3 support, confidence metadata, and honest MIDI sketch labeling are implemented and verified.
-2. **Plan deeper transcription** — next meaningful leap is real bass/chord/melody extraction rather than generated sketches.
+1. **Verify and close audio-intelligence-v1** — MP3 support, confidence metadata, honest sketch labeling, and first-pass bass transcription are implemented.
+2. **Plan deeper transcription** — next meaningful leap is source-aware bass/chord/melody extraction rather than full-mix heuristic tracking.
 3. **Choose local LLM runtime** — deterministic prompt generation still needs replacement with the selected local model path.
 
 ## Open decisions

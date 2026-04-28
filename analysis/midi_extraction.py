@@ -24,6 +24,33 @@ NOTE_TO_MIDI = {
 }
 
 
+def write_note_events_midi(path: str, events: list[dict], bpm: float = 120.0) -> str:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    ticks_per_beat = 480
+    tempo = int(60_000_000 / max(40.0, min(220.0, bpm or 120.0)))
+    events = sorted(events, key=lambda event: float(event.get("start", 0.0)))
+
+    track_events: list[tuple[int, bytes]] = [(0, b"\xff\x51\x03" + tempo.to_bytes(3, "big")), (0, b"\xc0\x20")]
+    for event in events:
+        start_tick = _seconds_to_ticks(float(event.get("start", 0.0)), bpm, ticks_per_beat)
+        duration = max(0.05, float(event.get("duration", 0.25)))
+        end_tick = start_tick + _seconds_to_ticks(duration, bpm, ticks_per_beat)
+        pitch = max(0, min(127, int(event.get("midi_note", 48))))
+        velocity = max(1, min(127, int(event.get("velocity", 86))))
+        track_events.append((start_tick, bytes([0x90, pitch, velocity])))
+        track_events.append((end_tick, bytes([0x80, pitch, 0])))
+
+    data = bytearray()
+    cursor = 0
+    for tick, message in sorted(track_events, key=lambda item: (item[0], item[1][0] == 0x90)):
+        data.extend(_varlen(max(0, tick - cursor)) + message)
+        cursor = tick
+    data.extend(_varlen(0) + b"\xff\x2f\x00")
+
+    _write_single_track(path, data, ticks_per_beat)
+    return os.path.abspath(path)
+
+
 def write_reference_sketch_midi(path: str, key: str = "C major", bpm: float = 120.0, bars: int = 4) -> str:
     """Write a generated reference sketch, not a transcription of the source."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -45,11 +72,20 @@ def write_reference_sketch_midi(path: str, key: str = "C major", bpm: float = 12
 
     events.extend(_varlen(0) + b"\xff\x2f\x00")
 
+    _write_single_track(path, events, ticks_per_beat)
+    return os.path.abspath(path)
+
+
+def _seconds_to_ticks(seconds: float, bpm: float, ticks_per_beat: int) -> int:
+    beats = seconds / (60.0 / max(40.0, min(220.0, bpm or 120.0)))
+    return max(0, round(beats * ticks_per_beat))
+
+
+def _write_single_track(path: str, events: bytes | bytearray, ticks_per_beat: int) -> None:
     header = b"MThd" + struct.pack(">IHHH", 6, 0, 1, ticks_per_beat)
     track = b"MTrk" + struct.pack(">I", len(events)) + bytes(events)
     with open(path, "wb") as midi_file:
         midi_file.write(header + track)
-    return os.path.abspath(path)
 
 
 def _varlen(value: int) -> bytes:

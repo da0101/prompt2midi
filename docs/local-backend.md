@@ -35,4 +35,9 @@ Supported reference files:
 - `.wav` / `.wave` PCM files
 - `.mp3` files when `ffmpeg` is on `PATH` or `PROMPT2MIDI_FFMPEG` points to the binary
 
-MP3 files are decoded into `tmp/jobs/<job_id>/decoded-input.wav` before Python analysis. MIDI output is named `reference-sketch.mid` because it is generated from estimated BPM/key and is not transcription.
+MP3 files are decoded into `tmp/jobs/<job_id>/decoded-input.wav` before Python analysis.
+
+MIDI outputs:
+
+- `reference-sketch.mid` is always generated from estimated BPM/key and is not transcription.
+- `bass-transcription.mid` is written when experimental monophonic low-frequency tracking finds note events. Treat it as an editable starting point, not a finished extraction.

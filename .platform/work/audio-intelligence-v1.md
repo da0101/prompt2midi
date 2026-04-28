@@ -26,6 +26,7 @@ _Metadata rules: `stream_id` must be `stream-<slug>`, `slug` must match the file
 
 ## Done criteria
 - [x] Reference-track analysis no longer presents placeholder MIDI as if it were accurate transcription.
+- [x] First-pass bass transcription exists as a separately labeled experimental output with fixture coverage.
 - [x] BPM/key/energy outputs have documented confidence/warnings and fixture-backed regression tests.
 - [x] MP3 support is either implemented with a chosen decoder or intentionally deferred with a clear product/API reason.
 - [x] Backend and Python tests pass: `npm test`, `python3 -m unittest analysis/test_feature_extraction.py`, and Python compile check.
@@ -43,20 +44,24 @@ _Append-only. Format: `2026-04-28 — <decision> — <rationale>`_
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-04-28 by danilulmashev (auto)
-- **What just happened:** (auto) bb6752b: Implement audio intelligence v1
-- **Current focus:** —
-- **Next action:** (auto-saved from commit — update next action manually)
+- **Last updated:** 2026-04-28 by codex
+- **What just happened:** Committed experimental bass transcription as `625a780`.
+- **Current focus:** Close the stream and archive it cleanly.
+- **Next action:** Run `agentboard close audio-intelligence-v1 --confirm` after final status check.
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `2026-04-28 HH:MM — <what happened>`._
 
-2026-04-28 13:07 — (auto) bb6752b: Implement audio intelligence v1
+2026-04-28 14:07 — (auto) 625a780: Add experimental bass transcription
+
+2026-04-28 13:35 — Added experimental bass transcription: Python low-frequency note tracking, event MIDI writer, backend contract/tests, JUCE result labeling, docs, and manual MP3 smoke on the provided fake-music track.
+
+2026-04-28 13:07 — (auto) ecb4501: Implement audio intelligence v1
 
 2026-04-28 13:07 — Implemented audio-intelligence v1: MP3 boundary decoding via FFmpeg, BPM/key confidence and warnings, reference-sketch MIDI labeling, JUCE MP3 picker support, docs/tests/platform updates, and manual smoke on the provided MP3.
 
-2026-04-28 12:46 — (auto) 9be99d0: Checkpoint audio intelligence stream
+2026-04-28 12:46 — (auto) 1aaa4c4: Checkpoint audio intelligence stream
 
 2026-04-28 13:00 — Implemented MP3 boundary decoding and renamed generated MIDI to a reference sketch.
 2026-04-28 13:05 — Verified backend, Python, manual MP3 smoke, and full JUCE Debug build.
@@ -74,11 +79,104 @@ _Things blocked on user input. Remove when resolved._
 
 ---
 
-## 🔍 Audit Report
+## 🔍 Audit — 2026-04-28
 
-> **Required:** After every audit request, paste the full standardized report here.
-> Do NOT leave the audit only in chat — it must be anchored here so the next session has it.
-> Format: `.platform/workflow.md` → Stream / Feature Analysis Protocol → Step 4 template.
-> After a clean re-audit (all 🟢), remove this section before stream closure.
+> Run locally for one repo. No delegated agents were used because this Codex session only delegates when explicitly requested.
 
-_Status: not yet run_
+# 📋 audio-intelligence-v1 — Audit Snapshot
+
+> **Stream:** `audio-intelligence-v1` · **Date:** 2026-04-28 · **Status:** 🟢 clean
+> **Repos touched:** prompt2midi
+
+---
+
+## ⚡ At-a-Glance Scorecard
+
+| | 🖥️ prompt2midi |
+|---|:---:|
+| **Implementation** | 🟢 |
+| **Tests**          | 🟢 |
+| **Security**       | 🟢 |
+| **Code Quality**   | 🟢 |
+
+> **Bottom line:** The stream is green for a first-pass local audio intelligence upgrade: MP3 input, confidence metadata, honest sketch labeling, and experimental bass transcription are implemented and verified.
+
+---
+
+## 🔄 How the Feature Works (End-to-End)
+
+```text
+JUCE editor
+  -> Node local API /analyze
+  -> optional FFmpeg MP3 decode to WAV
+  -> Python feature extraction + experimental bass transcription
+  -> reference-sketch.mid + optional bass-transcription.mid
+  -> Node prompt package
+  -> JUCE result summary
+```
+
+---
+
+## 🛡️ Security
+
+| Severity | Repo | Finding |
+|:---:|---|---|
+| 🟢 Clean | prompt2midi | Local-only path-based workflow; no secrets, auth, SQL, external upload path, or user-input shell execution added. |
+
+---
+
+## 🧪 Test Coverage
+
+### prompt2midi
+| Area | Tested? | File |
+|---|:---:|---|
+| Python feature extraction + MIDI writers | ✅ Strong | `analysis/test_feature_extraction.py` |
+| Experimental bass transcription fixture | ✅ Good | `analysis/test_feature_extraction.py` |
+| Backend API and Python bridge | ✅ Strong | `backend/test/server.test.js` |
+| MP3 decode boundary | ✅ Good | `backend/test/server.test.js` |
+| Native JUCE build | ✅ Good | `xcodebuild -project Builds/MacOSX/prompt2midi.xcodeproj ... build` |
+
+---
+
+## ✅ Implementation Status
+
+### prompt2midi
+| Component | Status | Location |
+|---|:---:|---|
+| Backend/Python analysis orchestration | ✅ Done | `analysis/analyze.py:16` |
+| Experimental bass transcription | ✅ Done | `analysis/bass_transcription.py:21` |
+| Event-based MIDI writer | ✅ Done | `analysis/midi_extraction.py:27` |
+| JUCE result labeling | ✅ Done | `Source/LocalApiClient.h:91` |
+| Backend prompt next steps | ✅ Done | `backend/lib/promptGenerator.js:18` |
+| Platform/docs state | ✅ Done | `docs/local-backend.md:38` |
+
+---
+
+## 🔧 Open Issues
+
+### 🔴 Must Fix (blocking)
+| # | Repo | Issue |
+|---|---|---|
+| - | - | None |
+
+### 🟡 Should Fix Soon
+| # | Repo | Issue | Location |
+|---|---|---|---|
+| - | - | None blocking this stream | - |
+
+### ⚪ Known Limitations (document, not block)
+| # | Limitation |
+|---|---|
+| 1 | `bass-transcription.mid` is monophonic low-frequency tracking over the full mix, not source separation. |
+| 2 | Full chord, melody, section, and stem-aware extraction remain future streams. |
+| 3 | The standalone plugin UI is functional but still temporary; the accepted UI polish follow-up remains separate. |
+
+---
+
+## 🎯 Close Checklist / Priority Order
+
+  ☑  1. 🧪  Run Python unit tests.
+  ☑  2. 🧪  Run backend Node tests.
+  ☑  3. 🔍  Run compile/syntax checks.
+  ☑  4. 🔍  Run JUCE Debug native build.
+  ☑  5. ✅  Commit and close the stream.

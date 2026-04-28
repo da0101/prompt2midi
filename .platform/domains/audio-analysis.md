@@ -16,10 +16,10 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 ## Backend / source of truth
 
-- Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, and `analysis/midi_extraction.py`.
-- Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, and a `reference-sketch.mid` path.
+- Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, `analysis/midi_extraction.py`, and `analysis/bass_transcription.py`.
+- Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, a `reference-sketch.mid` path, and optional experimental `bass-transcription.mid`.
 - Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
-- Later phases: section segmentation, stem/instrument analysis, chord progression, melody/bass MIDI extraction.
+- Later phases: section segmentation, stem/instrument analysis, chord progression, and production-grade melody/bass MIDI extraction.
 - Python should return structured JSON only; interpretation/prose belongs to Node/LLM.
 
 ## Frontend / clients
@@ -44,6 +44,7 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 - `promt.md`
 - `analysis/analyze.py`
+- `analysis/bass_transcription.py`
 - `analysis/feature_extraction.py`
 - `analysis/midi_extraction.py`
 - `analysis/test_feature_extraction.py`

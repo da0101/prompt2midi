@@ -19,7 +19,8 @@ function buildPromptPackage({ prompt = '', analysis }) {
     style_tags: styleTags,
     ai_music_prompt: aiPrompt,
     next_steps: [
-      'Use the MIDI sketch as a starting idea, not a transcription.',
+      'Use bass-transcription MIDI when present, then edit by ear in Ableton.',
+      'Use the reference sketch as a fallback starting idea, not a transcription.',
       'Use the generated prompt as a starting point for AI music generation.',
       'Run a deeper pass once section and stem analysis are implemented.'
     ]

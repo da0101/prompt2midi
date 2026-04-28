@@ -19,6 +19,8 @@ Expected:
 - Result includes `analysis.bpm`, `analysis.key`, `interpretation.producer_summary`, `interpretation.ai_music_prompt`.
 - Reference jobs create `tmp/jobs/<job_id>/reference-sketch.mid`.
 - The result labels that MIDI as a generated sketch, not source-track transcription.
+- When low-frequency note tracking finds events, jobs also create `tmp/jobs/<job_id>/bass-transcription.mid`.
+- The bass transcription is experimental monophonic tracking and should be edited by ear.
 - MP3 jobs include an analysis warning that the input was decoded through `ffmpeg`.
 
 ## JUCE plugin
