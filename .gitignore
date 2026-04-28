@@ -25,6 +25,15 @@ JuceLibraryCode/
 *.swo
 .vscode/
 
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+
+# prompt2midi local runtime
+tmp/
+
 # agentboard:runtime-begin
 .platform/events.jsonl
 .platform/events-*.jsonl

@@ -24,6 +24,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 3 | 2026-04-28 | Architecture | Use JUCE plugin + local Node orchestrator + Python analysis engine + local LLM layer. | This keeps the DAW UI thin, signal processing modular, and interpretation separate from analysis. | Putting all logic in the plugin; mixing producer prose into Python feature extraction. |
 | 4 | 2026-04-28 | Local-first constraint | Core workflow must run locally and must not require cloud APIs. | `promt.md` lists local-first/no cloud dependency as hard constraints. | Making OpenAI/ChatGPT API calls mandatory for the main path. |
 | 5 | 2026-04-28 | Threading boundary | Heavy work must stay out of JUCE `processBlock` and the audio thread. | Ableton plugin stability depends on non-blocking processing. | Running analysis, HTTP, subprocesses, or file-heavy logic in audio callbacks. |
+| 6 | 2026-04-28 | First backend slice | Use dependency-free Node stdlib HTTP/job orchestration and Python stdlib WAV analysis for the first vertical slice. | It proves the end-to-end contract immediately and keeps FastAPI/MP3/model choices reversible. | Introducing framework and decoder dependencies before the API and result contract are stable. |
 
 ---
 
@@ -34,6 +35,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 1 | 2026-04-28 | Local LLM runtime | Model/runtime is not selected yet. | Before implementing Phase 5 interpretation. |
 | 2 | 2026-04-28 | Repo split | Node and Python can start in this repo; split is undecided. | When backend/analysis code becomes large enough to need separate release/versioning. |
 | 3 | 2026-04-28 | First plugin format | AU/VST3/standalone release order is undecided. | Before packaging or Ableton acceptance testing. |
+| 4 | 2026-04-28 | Cloud API framework | Public cloud API may stay Node or move to FastAPI; endpoint contract should remain stable either way. | Before cloud deployment/auth/audio upload design. |
 
 ---
 

@@ -10,13 +10,13 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 | Area | Status | Last touched | Notes |
 |---|---|---|---|
-| JUCE plugin shell | 🔵 Exists | 2026-04-28 | Starter processor/editor compile surface exists with prompt input and Generate button. |
-| Audio track ingestion | ⧗ Pending | — | Needs drag/drop file handling from the plugin into the local backend. |
-| Python analysis engine | ⧗ Pending | — | Phase 1 target: BPM, key, spectral features, energy curve, loudness JSON. |
-| Node orchestrator | ⧗ Pending | — | Needs local REST API, job queue, progress status, Python process bridge, and LLM handoff. |
-| MIDI extraction/export | ⧗ Pending | — | Later phase: bassline/melody/chord MIDI generation and Ableton-friendly export. |
-| Local LLM interpretation | ⧗ Pending | — | Must transform structured JSON into producer insights and AI-music prompts. |
-| Ableton UX | ⧗ Pending | — | Needs progress, results panels, waveform/sections, prompt copy, and export buttons. |
+| JUCE plugin shell | 🔵 Exists | 2026-04-28 | Editor now has file choose/drop, prompt input, async local API polling, result display, and copy prompt. JUCE is installed at `/Applications/JUCE`; Projucer regenerated the Xcode project and Debug builds pass. |
+| Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV paths; backend accepts `audioPath` and prompt. MP3 not implemented yet. |
+| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free Phase 1 PCM WAV analyzer returns BPM, key estimate, energy curve, loudness, and spectral basics. |
+| Node orchestrator | 🔵 Exists | 2026-04-28 | Local stdlib Node API has `/analyze`, `/status`, `/result`, job state, Python bridge, and prompt package generation. |
+| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes a simple bassline MIDI sketch for WAV jobs. Full melody/chord extraction remains pending. |
+| Local LLM interpretation | 🔵 Exists | 2026-04-28 | Deterministic local prompt generator turns structured analysis into producer summary and AI music prompt. Real local model runtime remains deferred. |
+| Ableton UX | 🔵 Exists | 2026-04-28 | Functional MVP UI exists and builds as standalone/AU/VST3. It is accepted as temporary; full UI polish and in-host Ableton verification remain follow-ups. |
 
 **Legend:**
 - ✓ Done — shipped, tested, merged
@@ -27,9 +27,9 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 ## Immediate priorities
 
-1. **Define the vertical-slice MVP** — JUCE plugin can submit a local audio file or prompt, Node can run a job, Python returns basic analysis, and UI displays results.
-2. **Build Phase 1 analysis contract** — stable JSON for BPM, key, energy curve, and loudness before adding segmentation, stems, or MIDI.
-3. **Keep JUCE non-blocking** — all backend calls and file processing must happen off the audio thread and must not freeze Ableton.
+1. **Commit and close vertical-slice MVP** — automated tests/build are green and the temporary UI is accepted.
+2. **Open the next stream for audio intelligence** — improve transcription quality beyond placeholder MIDI sketches.
+3. **Choose next dependency path** — decide MP3 decoder, local LLM runtime, and whether Node remains the orchestrator for cloud mode or gets replaced by FastAPI.
 
 ## Open decisions
 
@@ -43,9 +43,10 @@ prompt2midi is a local-first AI co-producer for Ableton Live. The current repo i
 
 Things that must be resolved before this project ships / goes live:
 
+- [x] JUCE generated support files restored so Xcode builds.
 - [ ] JUCE plugin can run in Ableton without blocking the audio thread.
-- [ ] Local backend startup, health check, job status, and failure states are handled from the plugin.
-- [ ] Phase 1 analysis has repeatable accuracy checks for BPM/key on fixture tracks.
+- [x] Local backend startup, health check, job status, and failure states are handled from the plugin/backend contract.
+- [x] Phase 1 analysis has repeatable accuracy checks for BPM/key on fixture tracks.
 - [ ] No secrets, cloud-only assumptions, or raw user audio uploads are required for core use.
 
 ## Known gotchas (pinned)
@@ -53,9 +54,10 @@ Things that must be resolved before this project ships / goes live:
 Things that will bite every new session if not flagged upfront.
 
 - **`promt.md` is the execution plan** — do not treat the current JUCE starter code as the full intended scope.
-- **The plugin is currently only a shell** — processor code is template pass-through and the Generate button has no integration yet.
+- **The processor is intentionally pass-through** — the MVP integration lives in the editor/backend path and does not process audio in `processBlock`.
 - **Local-first is a hard product constraint** — design backend and LLM integrations so the main workflow works without cloud APIs.
 - **Audio-thread safety matters** — never do network/process/file-heavy work in `processBlock`.
+- **JUCE build depends on local generated files** — `JuceLibraryCode/` is generated locally by Projucer and ignored by git, so rerun Projucer if a clean checkout cannot build.
 
 ## File size violations
 

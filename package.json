@@ -1,0 +1,14 @@
+{
+  "name": "prompt2midi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first Ableton/JUCE AI co-producer backend.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node backend/server.js",
+    "test": "node --test backend/test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

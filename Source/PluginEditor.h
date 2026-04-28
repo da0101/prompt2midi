@@ -1,7 +1,7 @@
 /*
   ==============================================================================
 
-    This file contains the basic framework code for a JUCE plugin editor.
+    Ableton-facing editor for the prompt2midi local co-producer.
 
   ==============================================================================
 */
@@ -9,12 +9,14 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <atomic>
+#include <thread>
 #include "PluginProcessor.h"
+#include "ModernTheme.h"
 
 //==============================================================================
-/**
-*/
-class Prompt2midiAudioProcessorEditor  : public juce::AudioProcessorEditor
+class Prompt2midiAudioProcessorEditor  : public juce::AudioProcessorEditor,
+                                         public juce::FileDragAndDropTarget
 {
 public:
     Prompt2midiAudioProcessorEditor (Prompt2midiAudioProcessor&);
@@ -24,14 +26,41 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
+
 private:
-    // This reference is provided as a quick way for your editor to
-    // access the processor object that created it.
+    void chooseAudioFile();
+    void startAnalyzeJob();
+    void runAnalyzeJob (juce::String prompt, juce::String audioPath);
+    void configureInterface();
+    void publishStatus (const juce::String& text);
+    void publishResult (const juce::String& responseJson);
+    void publishFailure (const juce::String& text);
+
     Prompt2midiAudioProcessor& audioProcessor;
-    
-    // UI Components
+
+    juce::Label titleLabel;
+    juce::Label subtitleLabel;
+    juce::Label fileLabel;
+    juce::Label fileCaptionLabel;
+    juce::Label promptCaptionLabel;
+    juce::Label resultCaptionLabel;
     juce::TextEditor promptInput;
-    juce::TextButton generateButton;
+    juce::TextButton chooseFileButton;
+    juce::TextButton analyzeButton;
+    juce::TextButton copyPromptButton;
+    juce::Label statusLabel;
+    juce::TextEditor resultOutput;
+    prompt2midi::theme::LookAndFeel modernLookAndFeel;
+
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    juce::File selectedAudioFile;
+    juce::String latestPrompt;
+    std::thread requestThread;
+    std::atomic_bool shuttingDown { false };
+
+    static constexpr const char* localApiBase = "http://127.0.0.1:47321";
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Prompt2midiAudioProcessorEditor)
 };

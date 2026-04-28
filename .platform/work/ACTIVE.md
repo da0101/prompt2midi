@@ -5,7 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
-| vertical-slice-mvp | feature | planning | codex | 2026-04-28 |
+| vertical-slice-mvp | feature | in-progress | codex | 2026-04-28 |
 
 ---
 
