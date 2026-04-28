@@ -20,6 +20,8 @@ For everyday plugin testing with live backend logs:
 npm run dev:refresh
 ```
 
+The dev loop prints color-coded pipeline logs for each job: input validation, MP3 decode, Python analysis/model transcription, prompt generation, result aggregation, warnings, MIDI asset paths, note counts, and timing.
+
 Default address:
 
 ```text

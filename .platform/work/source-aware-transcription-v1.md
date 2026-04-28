@@ -43,19 +43,23 @@ _Append-only. Format: `2026-04-28 — <decision> — <rationale>`_
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
 - **Last updated:** 2026-04-28 by codex
-- **What just happened:** Committed model-backed MIDI transcription.
+- **What just happened:** Added visual pipeline logging for backend analysis jobs.
 - **Current focus:** User manual QA in the standalone app.
-- **Next action:** Run `npm run dev:refresh`, analyze `tmp/test-audio/smells-like-teen-spirit-fake-music.mp3`, and audition the model MIDI files.
+- **Next action:** Run `npm run dev:refresh`, analyze `tmp/test-audio/smells-like-teen-spirit-fake-music.mp3`, and watch terminal stages/logs.
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `2026-04-28 HH:MM — <what happened>`._
+
+2026-04-28 15:38 — (auto) Add visual pipeline logging
 
 2026-04-28 15:13 — (auto) Add model-backed MIDI transcription
 
 2026-04-28 14:11 — (auto) Close audio intelligence stream
 
 2026-04-28 15:20 — Added optional Basic Pitch model transcription. Real MP3 smoke produced `model-transcription.mid`, `model-bass-transcription.mid`, `reference-sketch.mid`, and heuristic `bass-transcription.mid`; BPM now normalizes half-time 60 to producer-facing 120 with low confidence.
+
+2026-04-28 15:35 — Added color-coded terminal pipeline logs for dev runs: validation, decode, Python/model analysis, prompt packaging, aggregation, warnings, MIDI paths, note counts, and timings.
 
 2026-04-28 14:15 — Created stream for the next accuracy step: source-aware transcription beyond the experimental full-mix bass tracker.
 

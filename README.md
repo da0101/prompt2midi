@@ -28,6 +28,8 @@ Run the full developer loop with backend logs visible:
 npm run dev:refresh
 ```
 
+`dev:refresh` shows color-coded pipeline stages, warnings, MIDI outputs, note counts, and timings while the plugin runs.
+
 The backend listens on `http://127.0.0.1:47321` and exposes:
 
 - `POST /analyze`

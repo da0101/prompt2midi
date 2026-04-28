@@ -6,6 +6,7 @@ const { validateAudioPath } = require('./lib/audioInput');
 const { createJobStore } = require('./lib/jobs');
 const { runAnalysis } = require('./lib/pythonRunner');
 const { buildPromptPackage } = require('./lib/promptGenerator');
+const { createPipelineLogger } = require('./lib/devLogger');
 
 const DEFAULT_PORT = Number.parseInt(process.env.PROMPT2MIDI_PORT || '47321', 10);
 
@@ -99,27 +100,37 @@ function createApp(options = {}) {
 }
 
 async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
+  const log = createPipelineLogger(jobId);
   jobs.update(jobId, { status: 'running', progress: 10, message: 'Preparing local analysis.' });
-  console.log(`[job ${jobId}] started${input.audioPath ? ` audio=${input.audioPath}` : ' prompt-only'}`);
+  log.banner(input);
 
   try {
     let analysisPayload;
     if (input.audioPath) {
+      log.stage('01 validate input', 'accepted by API');
+      log.done('01 validate input');
       jobs.update(jobId, { progress: 35, message: 'Analyzing reference features.' });
-      analysisPayload = await analyzer(input.audioPath, jobId);
+      log.stage('02 audio analysis', 'decode, features, MIDI extraction');
+      analysisPayload = await analyzer(input.audioPath, jobId, log);
+      log.done('02 audio analysis', `${Object.keys(analysisPayload.midi_files || {}).length} MIDI file(s)`);
     } else {
+      log.stage('01 prompt-only analysis');
       analysisPayload = {
         analysis: promptOnlyAnalysis(input.prompt),
         midi_files: {}
       };
+      log.done('01 prompt-only analysis');
     }
 
     jobs.update(jobId, { progress: 75, message: 'Generating producer prompt.' });
+    log.stage('03 prompt package', 'producer summary + AI prompt');
     const interpretation = promptGenerator({
       prompt: input.prompt,
       analysis: analysisPayload.analysis
     });
+    log.done('03 prompt package');
 
+    log.stage('04 aggregate result', 'store job result for UI polling');
     jobs.update(jobId, {
       status: 'succeeded',
       progress: 100,
@@ -132,7 +143,8 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
         midi_notes: analysisPayload.midi_notes || []
       }
     });
-    console.log(`[job ${jobId}] succeeded`);
+    log.done('04 aggregate result');
+    log.success(`bpm=${analysisPayload.analysis.bpm || 'unknown'} key=${analysisPayload.analysis.key || 'unknown'}`);
   } catch (error) {
     jobs.update(jobId, {
       status: 'failed',
@@ -140,7 +152,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       message: 'Analysis failed.',
       error: normalizeError(error)
     });
-    console.error(`[job ${jobId}] failed`, error && (error.stack || error.message || error));
+    log.fail(error);
   }
 }
 
@@ -221,7 +233,8 @@ function sendJson(res, statusCode, payload) {
 if (require.main === module) {
   const server = createApp();
   server.listen(DEFAULT_PORT, '127.0.0.1', () => {
-    console.log(`prompt2midi local backend listening on http://127.0.0.1:${DEFAULT_PORT}`);
+    console.log(`\x1b[32m● prompt2midi backend listening\x1b[0m http://127.0.0.1:${DEFAULT_PORT}`);
+    console.log('\x1b[2m  Waiting for Analyze jobs. Press Ctrl-C to stop.\x1b[0m');
   });
 }
 
