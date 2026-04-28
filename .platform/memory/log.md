@@ -5,6 +5,7 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-04-28 — commit `4f76c6b`: Show live analysis pipeline progress — auto-logged
 
 2026-04-28 — closed stream source-aware-transcription-v1 → ./.platform/work/archive/source-aware-transcription-v1.md (by danilulmashev)
 - 2026-04-28 — commit `08eebd4`: Add stem-aware bass transcription — auto-logged
