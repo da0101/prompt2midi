@@ -4,9 +4,9 @@
 > 30-second orientation: what we're building, why, and where we stand.
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
-**Feature:** none active
-**Status:** ready for next stream
-**Stream file:** none
+**Feature:** inspired-loop-engine-v1 — product contract reframe + deterministic composition engine
+**Status:** in-progress
+**Stream file:** work/inspired-loop-engine-v1.md
 
 ---
 
@@ -42,10 +42,11 @@ See `work/ACTIVE.md` for stream status.
 > Prefer `.platform/domains/<name>.md` files (cross-layer, focused) over repo-wide files.
 > Repo files (`backend.md`, `admin.md`, etc.) are conventions — load only if you need to understand patterns.
 
-- `.platform/domains/audio-analysis.md` — relevant domain for this stream
-- `.platform/domains/llm-midi-generation.md` — relevant domain for this stream
-- `.platform/domains/local-orchestration.md` — relevant domain for this stream
-- `.platform/domains/juce-plugin.md` — relevant domain for this stream
+- `.platform/domains/composition-engine.md` — primary domain for this stream (new)
+- `.platform/domains/audio-analysis.md` — analysis evidence layer
+- `.platform/domains/llm-midi-generation.md` — SUNO prompt (Phase 4, stub for now)
+- `.platform/domains/local-orchestration.md` — Node job lifecycle
+- `.platform/domains/juce-plugin.md` — JUCE result display
 
 
 **Do not load:** `.platform/work/archive/*` unless auditing a closed stream.

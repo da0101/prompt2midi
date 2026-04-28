@@ -131,6 +131,63 @@ inline juce::String summarizeStatus (const juce::var& root)
     return output;
 }
 
+inline juce::String summarizeComposition (const juce::var& composition, juce::String& promptForClipboard, const juce::var& sunoPrompt)
+{
+    auto* compObject = composition.getDynamicObject();
+    if (compObject == nullptr)
+        return {};
+
+    auto bars    = compObject->getProperty ("bars").toString();
+    auto bpm     = compObject->getProperty ("bpm").toString();
+    auto key     = compObject->getProperty ("key").toString();
+    auto style   = compObject->getProperty ("style").toString();
+    auto midi    = compObject->getProperty ("midi");
+    auto desc    = compObject->getProperty ("description");
+
+    juce::String output;
+    output << "Generated Loop Package\n";
+    output << "Style: "  << (style.isNotEmpty() ? style : "unknown") << "\n";
+    output << "BPM: "    << (bpm.isNotEmpty()   ? bpm   : "unknown") << "\n";
+    output << "Key: "    << (key.isNotEmpty()    ? key   : "unknown") << "\n";
+    output << "Bars: "   << (bars.isNotEmpty()   ? bars  : "32")      << "\n\n";
+
+    if (auto* midiObject = midi.getDynamicObject())
+    {
+        output << "Files:\n";
+        for (const juce::String& track : { juce::String ("bass"), juce::String ("drums"),
+                                           juce::String ("chords"), juce::String ("melody"),
+                                           juce::String ("full_loop") })
+        {
+            auto filePath = midiObject->getProperty (track).toString();
+            if (filePath.isNotEmpty())
+                output << "  " << track << ": " << filePath << "\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* descObject = desc.getDynamicObject())
+    {
+        output << "Track notes:\n";
+        for (const juce::String& track : { juce::String ("bass"), juce::String ("drums"),
+                                           juce::String ("chords"), juce::String ("melody") })
+        {
+            auto note = descObject->getProperty (track).toString();
+            if (note.isNotEmpty())
+                output << "  " << track << ": " << note << "\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* sunoObject = sunoPrompt.getDynamicObject())
+    {
+        promptForClipboard = sunoObject->getProperty ("text").toString();
+        if (promptForClipboard.isNotEmpty())
+            output << "SUNO Prompt:\n" << promptForClipboard << "\n\n";
+    }
+
+    return output;
+}
+
 inline juce::String summarizeResult (const juce::var& root, juce::String& promptForClipboard)
 {
     auto* rootObject = root.getDynamicObject();
@@ -142,21 +199,21 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     if (resultObject == nullptr)
         return "The backend returned no result object.";
 
-    auto analysis = resultObject->getProperty ("analysis");
+    auto analysis     = resultObject->getProperty ("analysis");
+    auto composition  = resultObject->getProperty ("composition");
+    auto sunoPrompt   = resultObject->getProperty ("suno_prompt");
     auto interpretation = resultObject->getProperty ("interpretation");
-    auto midiFiles = resultObject->getProperty ("midi_files");
-    auto midiAssets = resultObject->getProperty ("midi_assets");
-    auto midiNotes = resultObject->getProperty ("midi_notes");
+    auto midiNotes    = resultObject->getProperty ("midi_notes");
 
-    auto bpm = propertyString (analysis, "bpm");
-    auto key = propertyString (analysis, "key");
-    auto loudness = propertyString (analysis, "loudness");
+    auto bpm           = propertyString (analysis, "bpm");
+    auto key           = propertyString (analysis, "key");
     auto bpmConfidence = propertyString (analysis, "bpm_confidence");
     auto keyConfidence = propertyString (analysis, "key_confidence");
-    auto summary = propertyString (interpretation, "producer_summary");
-    promptForClipboard = propertyString (interpretation, "ai_music_prompt");
 
     juce::String output;
+
+    // Reference analysis header
+    output << "Reference Analysis\n";
     output << "BPM: " << (bpm.isNotEmpty() ? bpm : "unknown");
     if (bpmConfidence.isNotEmpty())
         output << " (" << confidenceLabel (bpmConfidence) << " confidence)";
@@ -164,72 +221,44 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     output << "Key: " << (key.isNotEmpty() ? key : "unknown");
     if (keyConfidence.isNotEmpty())
         output << " (" << confidenceLabel (keyConfidence) << " confidence)";
-    output << "\n";
-    output << "Loudness: " << (loudness.isNotEmpty() ? loudness + " dBFS" : "unknown") << "\n\n";
+    output << "\n\n";
 
     auto warnings = analysis.getDynamicObject() != nullptr
         ? analysis.getDynamicObject()->getProperty ("warnings")
         : juce::var();
-    appendStringArray (output, warnings, "Warning: ");
-    if (warnings.getArray() != nullptr)
-        output << "\n";
-
-    output << "Producer insight:\n" << summary << "\n\n";
-    output << "AI music prompt:\n" << promptForClipboard << "\n\n";
-
-    if (auto* assets = midiAssets.getArray())
+    if (auto* warningArray = warnings.getArray())
     {
-        output << "Recommended files:\n";
-        bool wroteRecommended = false;
-        for (const auto& asset : *assets)
+        for (const auto& w : *warningArray)
         {
-            auto* object = asset.getDynamicObject();
-            if (object == nullptr)
+            auto text = w.toString();
+            if (text.containsIgnoreCase ("not source-track") || text.containsIgnoreCase ("rough tonal"))
                 continue;
-            if (! static_cast<bool> (object->getProperty ("is_recommended_output")))
-                continue;
-
-            auto label = object->getProperty ("label").toString();
-            auto path = object->getProperty ("path").toString();
-            auto confidence = object->getProperty ("confidence").toString();
-            auto sourceMethod = object->getProperty ("source_method").toString();
-            auto exportName = object->getProperty ("export_name").toString();
-
-            output << "- " << (label.isNotEmpty() ? label : "MIDI asset");
-            if (exportName.isNotEmpty())
-                output << " [" << exportName << "]";
-            if (confidence.isNotEmpty())
-                output << " (" << confidenceLabel (confidence) << " confidence)";
-            if (sourceMethod.isNotEmpty())
-                output << "\n  Method: " << sourceMethod;
-            if (path.isNotEmpty())
-                output << "\n  " << path;
-            output << "\n";
-            appendStringArray (output, object->getProperty ("limitations"), "  Limitation: ");
-            wroteRecommended = true;
+            output << "Note: " << text << "\n";
         }
-        if (! wroteRecommended)
-            output << "No recommended MIDI export was produced for this run.\n";
-        output << "\n";
+        if (warningArray->size() > 0)
+            output << "\n";
+    }
+
+    // Generated loop package (primary product output)
+    juce::String compBlock = summarizeComposition (composition, promptForClipboard, sunoPrompt);
+    if (compBlock.isNotEmpty())
+    {
+        output << compBlock;
     }
     else
     {
-    if (auto* midiObject = midiFiles.getDynamicObject())
-    {
-        auto sketchPath = midiObject->getProperty ("reference_sketch").toString();
-        if (sketchPath.isNotEmpty())
-            output << "MIDI reference sketch (not transcription):\n" << sketchPath << "\n";
-
-        auto bassPath = midiObject->getProperty ("bass_transcription").toString();
-        if (bassPath.isNotEmpty())
-            output << "\nExperimental bass transcription:\n" << bassPath << "\n";
-    }
+        // Fallback: show producer prompt from old path when no composition available
+        auto summary = propertyString (interpretation, "producer_summary");
+        auto aiPrompt = propertyString (interpretation, "ai_music_prompt");
+        promptForClipboard = aiPrompt;
+        output << "Producer insight:\n" << summary << "\n\n";
+        output << "AI music prompt:\n" << aiPrompt << "\n\n";
     }
 
     if (auto* notes = midiNotes.getArray())
     {
         for (const auto& note : *notes)
-            output << "\nNote: " << note.toString();
+            output << "Note: " << note.toString() << "\n";
     }
 
     return output;

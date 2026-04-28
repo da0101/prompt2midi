@@ -138,6 +138,9 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       message: 'Analysis complete.',
       result: {
         analysis: analysisPayload.analysis,
+        composition: analysisPayload.composition || null,
+        suno_prompt: analysisPayload.suno_prompt || null,
+        export_dir: analysisPayload.export_dir || null,
         interpretation,
         midi_files: analysisPayload.midi_files || {},
         export_files: analysisPayload.export_files || {},

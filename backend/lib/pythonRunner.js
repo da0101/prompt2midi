@@ -72,11 +72,15 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
           const stemNames = Array.isArray(stems.stems) && stems.stems.length > 0 ? stems.stems.join(',') : 'none';
           log.info(`stem separation: ${stems.available ? 'on' : 'off'} method=${stems.method} stems=${stemNames}`);
         }
+        const comp = payload.composition || {};
+        if (comp.style) {
+          log.info(`composition: style=${comp.style} key=${comp.key} bpm=${comp.bpm} bars=${comp.bars}`);
+          for (const [track, filePath] of Object.entries(comp.midi || {})) {
+            log.info(`composition output ${track}: ${filePath}`);
+          }
+        }
         for (const asset of (payload.midi_assets || []).filter((item) => item.is_recommended_output)) {
           log.info(`recommended output ${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
-        }
-        for (const asset of (payload.midi_assets || []).filter((item) => !item.is_recommended_output)) {
-          log.info(`${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
         }
       }
       if (inputInfo.originalPath && inputInfo.originalPath !== audioPath) {
@@ -89,6 +93,9 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
 
       resolve({
         analysis,
+        composition: payload.composition || null,
+        suno_prompt: payload.suno_prompt || null,
+        export_dir: payload.export_dir || null,
         midi_files: payload.midi_files || {},
         export_files: payload.export_files || {},
         midi_assets: payload.midi_assets || [],

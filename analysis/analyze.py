@@ -10,6 +10,7 @@ import shutil
 import sys
 
 from bass_transcription import transcribe_bassline
+from composition import generate_inspired_loop
 from feature_extraction import AnalysisError, analyze_wav
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from source_transcription import can_run_model_transcription, transcribe_with_model
@@ -85,6 +86,16 @@ def run(audio_path: str, output_dir: str) -> dict:
         )
 
     export_files = _promote_exports(output_dir, midi_files, midi_assets)
+
+    _progress("composition: generating inspired 32-bar loop")
+    exports_dir = os.path.join(output_dir, "exports")
+    composition, suno_prompt = generate_inspired_loop(
+        analysis=analysis,
+        evidence=analysis,
+        output_dir=exports_dir,
+        bars=32,
+    )
+
     analysis["bass_transcription"] = {
         "event_count": len(bass["events"]),
         "confidence": bass["confidence"],
@@ -107,6 +118,9 @@ def run(audio_path: str, output_dir: str) -> dict:
     return {
         "ok": True,
         "analysis": analysis,
+        "composition": composition,
+        "suno_prompt": suno_prompt,
+        "export_dir": os.path.abspath(exports_dir),
         "midi_files": midi_files,
         "export_files": export_files,
         "midi_assets": midi_assets,

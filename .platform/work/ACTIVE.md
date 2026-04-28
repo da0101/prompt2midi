@@ -5,6 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
+| inspired-loop-engine-v1 | feature | in-progress | claude-code | 2026-04-28 |
 
 ---
 
