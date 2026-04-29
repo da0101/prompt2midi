@@ -15,6 +15,7 @@ from composition import (
     _parse_key,
     generate_inspired_loop,
 )
+from enhanced_analysis import better_bpm, better_key
 
 
 class ParseKeyTest(unittest.TestCase):
@@ -37,6 +38,36 @@ class ParseKeyTest(unittest.TestCase):
         self.assertEqual(midi, 66)
 
 
+class EnhancedAnalysisFallbackTest(unittest.TestCase):
+    def test_better_bpm_returns_fallback_when_disabled(self):
+        old = os.environ.get("PROMPT2MIDI_DISABLE_LIBROSA")
+        os.environ["PROMPT2MIDI_DISABLE_LIBROSA"] = "1"
+        try:
+            result = better_bpm("unused.wav", 126.0, 0.7)
+            self.assertEqual(result["bpm"], 126.0)
+            self.assertEqual(result["confidence"], 0.7)
+            self.assertEqual(result["method"], "autocorrelation")
+        finally:
+            if old is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_LIBROSA", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_LIBROSA"] = old
+
+    def test_better_key_returns_fallback_when_disabled(self):
+        old = os.environ.get("PROMPT2MIDI_DISABLE_LIBROSA")
+        os.environ["PROMPT2MIDI_DISABLE_LIBROSA"] = "1"
+        try:
+            result = better_key("unused.wav", "D minor", 0.75)
+            self.assertEqual(result["key"], "D minor")
+            self.assertEqual(result["confidence"], 0.75)
+            self.assertEqual(result["method"], "fundamental_freq")
+        finally:
+            if old is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_LIBROSA", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_LIBROSA"] = old
+
+
 class InferStyleTest(unittest.TestCase):
     def test_minimal_house_range(self):
         style = _infer_style({"bpm": 125, "energy_curve": [{"energy": 0.3}]})
@@ -45,6 +76,10 @@ class InferStyleTest(unittest.TestCase):
     def test_techno_range(self):
         style = _infer_style({"bpm": 140})
         self.assertEqual(style, "Techno")
+
+    def test_uses_genre_dict_when_present(self):
+        style = _infer_style({"bpm": 90, "genre": {"primary": "Deep House"}})
+        self.assertEqual(style, "Deep House")
 
 
 class BassEventsTest(unittest.TestCase):

@@ -6,11 +6,11 @@ All functions degrade gracefully when librosa is not installed.
 from __future__ import annotations
 
 import math
+import os
 
 
 def better_bpm(audio_path: str, fallback_bpm: float | None, fallback_confidence: float | None) -> dict:
     """Estimate BPM using librosa beat tracker if available, else return fallback."""
-    import os
     if os.environ.get("PROMPT2MIDI_DISABLE_LIBROSA") == "1":
         return {"bpm": fallback_bpm, "confidence": fallback_confidence, "method": "autocorrelation"}
     try:
@@ -32,7 +32,6 @@ def better_bpm(audio_path: str, fallback_bpm: float | None, fallback_confidence:
 
 def better_key(audio_path: str, fallback_key: str | None, fallback_confidence: float | None) -> dict:
     """Estimate key using librosa chroma + Krumhansl-Schmuckler profiles if available."""
-    import os
     if os.environ.get("PROMPT2MIDI_DISABLE_LIBROSA") == "1":
         return {"key": fallback_key, "confidence": fallback_confidence, "method": "fundamental_freq"}
     try:

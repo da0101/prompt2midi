@@ -116,7 +116,7 @@ describe('prompt2midi local API', () => {
         assert.ok(comp.midi[track], `composition.midi.${track} missing`);
         assert.ok(fs.existsSync(comp.midi[track]), `${track}.mid not on disk`);
       }
-      assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text);
+      assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0);
       assert.ok(result.body.result.export_dir);
     } finally {
       await close(server);
@@ -155,6 +155,28 @@ describe('prompt2midi local API', () => {
       const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
       assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0,
         'should fall back to Python stub text');
+    } finally {
+      await close(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to Python stub when sunoGenerator throws', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt2midi-throw-'));
+    const audioPath = path.join(tempDir, 'pulse.wav');
+    writePulseWav(audioPath, 120);
+
+    const throwingGenerator = async () => { throw new Error('Gemini API error'); };
+    const server = await listen(createApp({ sunoGenerator: throwingGenerator }));
+    try {
+      const start = await request(server, 'POST', '/analyze', { audioPath, prompt: '' });
+      const status = await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+      assert.equal(status.body.status, 'succeeded', 'job must succeed even when Gemini throws');
+      const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
+      assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0,
+        'should fall back to Python stub text when Gemini throws');
+      assert.ok(status.body.events.some((e) => e.type === 'warning' && /Gemini/.test(e.detail)),
+        'warning event should be logged');
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });

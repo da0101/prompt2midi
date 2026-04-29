@@ -20,6 +20,7 @@ _MINOR_PENTATONIC = [0, 3, 5, 7, 10]
 _MAJOR_PENTATONIC = [0, 2, 4, 7, 9]
 _KICK, _SNARE, _CLAP, _HAT_CLOSED, _HAT_OPEN = 36, 38, 39, 42, 46
 _DRUM_CH = 9  # GM percussion channel (0-indexed)
+_clamp_bass = lambda n: max(24, min(55, n))  # sub-bass MIDI range
 
 
 def generate_inspired_loop(
@@ -57,10 +58,11 @@ def generate_inspired_loop(
     }
     _progress("composition: writing SUNO prompt")
 
+    chord_quality = "minor seventh" if mode == "minor" else "major seventh"
     description = {
         "bass": f"syncopated offbeat sub bass in {key_str}, inspired by reference groove",
         "drums": "four-on-floor kick with 16th hats, clap on 2 and 4, sparse open hat offbeats",
-        "chords": f"minor seventh stabs in {key_str} with restrained voice movement",
+        "chords": f"{chord_quality} stabs in {key_str} with restrained voice movement",
         "melody": f"sparse pentatonic motif in {key_str} with call-response variation",
     }
     composition = {
@@ -114,12 +116,11 @@ def _bass_events(root: int, bpm: float, bars: int) -> list[dict]:
         alt = root + 7 if phase >= 1 else root       # 5th at bar 8
         b7 = root + 10 if phase >= 2 else root        # b7 at bar 16
         high = root + 12 if phase >= 3 else root      # octave at bar 24
-        clamp = lambda n: max(24, min(55, n))
         events += [
-            {"start": t + step,     "duration": step * 1.5, "midi_note": clamp(root),                    "velocity": 95},
-            {"start": t + step * 3, "duration": step,       "midi_note": clamp(alt if bar % 2 else root), "velocity": 80},
-            {"start": t + step * 4, "duration": step * 1.5, "midi_note": clamp(b7),                       "velocity": 88},
-            {"start": t + step * 7, "duration": step * 0.8, "midi_note": clamp(high),                     "velocity": 75},
+            {"start": t + step,     "duration": step * 1.5, "midi_note": _clamp_bass(root),                    "velocity": 95},
+            {"start": t + step * 3, "duration": step,       "midi_note": _clamp_bass(alt if bar % 2 else root), "velocity": 80},
+            {"start": t + step * 4, "duration": step * 1.5, "midi_note": _clamp_bass(b7),                       "velocity": 88},
+            {"start": t + step * 7, "duration": step * 0.8, "midi_note": _clamp_bass(high),                     "velocity": 75},
         ]
     return events
 

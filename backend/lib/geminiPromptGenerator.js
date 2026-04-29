@@ -1,9 +1,11 @@
 'use strict';
 
-const fs = require('node:fs');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 
+// Model ID is stable as of 2026-04; update when Gemini deprecates this version.
 const DEFAULT_MODEL = 'gemini-2.5-pro';
+const GEMINI_TIMEOUT_MS = 20_000;
 
 const SYSTEM_INSTRUCTION = `You are a music production expert writing a SUNO AI prompt.
 You receive structured JSON describing a reference track analysis and a generated loop composition.
@@ -45,12 +47,15 @@ async function generateSunoPrompt({ analysis, composition, exportDir, userPrompt
     JSON.stringify(structured, null, 2),
   ].join('\n');
 
-  const result = await model.generateContent(prompt);
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Gemini request timed out')), GEMINI_TIMEOUT_MS)
+  );
+  const result = await Promise.race([model.generateContent(prompt), timeout]);
   const text = result.response.text().trim();
 
   if (exportDir) {
     const promptPath = path.join(exportDir, 'prompt.txt');
-    fs.writeFileSync(promptPath, text, 'utf8');
+    await fs.writeFile(promptPath, text, 'utf8');
     return { text, path: path.resolve(promptPath) };
   }
 

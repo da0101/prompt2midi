@@ -55,12 +55,12 @@ inline juce::String confidenceLabel (const juce::String& raw)
 {
     auto value = raw.getDoubleValue();
     if (value >= 0.7)
-        return raw + " high";
+        return "high";
     if (value >= 0.4)
-        return raw + " medium";
+        return "medium";
     if (value > 0.0)
-        return raw + " low";
-    return raw.isNotEmpty() ? raw + " unavailable" : "unavailable";
+        return "low";
+    return "unavailable";
 }
 
 inline void appendStringArray (juce::String& output, const juce::var& value, const juce::String& prefix)
