@@ -56,7 +56,8 @@ def generate_inspired_loop(
     detected_drums = analysis.get("drums") or {}
 
     _progress(f"composition: generating bass — {key_str} style={style}")
-    bass = _bass_events(root_midi - 24, bpm, bars, style, rng)
+    bass = _bass_events(root_midi - 24, bpm, bars, style, rng,
+                        detected_chords if len(detected_chords) >= 2 else None)
     _progress(f"composition: generating drums — style={style}")
     drums = _drum_events(bpm, bars, style, rng,
                          detected_drums if detected_drums.get("kick") else None)
