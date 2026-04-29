@@ -11,6 +11,7 @@ import sys
 
 from bass_transcription import transcribe_bassline
 from composition import generate_inspired_loop
+from enhanced_analysis import better_bpm, better_key, estimate_groove, infer_genre
 from feature_extraction import AnalysisError, analyze_wav
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from source_transcription import can_run_model_transcription, transcribe_with_model
@@ -21,6 +22,22 @@ def run(audio_path: str, output_dir: str) -> dict:
     _progress("feature extraction: reading audio and estimating BPM/key/energy")
     analysis = analyze_wav(audio_path)
     os.makedirs(output_dir, exist_ok=True)
+
+    _progress("enhanced analysis: refining BPM, key, genre, groove")
+    bpm_result = better_bpm(audio_path, analysis.get("bpm"), analysis.get("bpm_confidence"))
+    if bpm_result["bpm"] is not None:
+        analysis["bpm"] = bpm_result["bpm"]
+        analysis["bpm_confidence"] = bpm_result["confidence"] or analysis.get("bpm_confidence")
+        analysis["bpm_method"] = bpm_result["method"]
+
+    key_result = better_key(audio_path, analysis.get("key"), analysis.get("key_confidence"))
+    if key_result["key"] is not None:
+        analysis["key"] = key_result["key"]
+        analysis["key_confidence"] = key_result["confidence"] or analysis.get("key_confidence")
+        analysis["key_method"] = key_result["method"]
+
+    analysis["genre"] = infer_genre(analysis)
+    analysis["groove"] = estimate_groove(analysis)
 
     _progress("midi sketch: writing reference-sketch.mid from estimated BPM/key")
     sketch_path = write_reference_sketch_midi(

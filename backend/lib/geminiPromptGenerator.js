@@ -27,6 +27,8 @@ async function generateSunoPrompt({ analysis, composition, exportDir, userPrompt
     bpm: composition.bpm,
     key: composition.key,
     bars: composition.bars,
+    genre: analysis.genre || null,
+    groove: analysis.groove || null,
     bass: (composition.description || {}).bass,
     drums: (composition.description || {}).drums,
     chords: (composition.description || {}).chords,

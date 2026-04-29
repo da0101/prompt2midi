@@ -10,6 +10,7 @@ const { createApp, promptOnlyAnalysis } = require('../server');
 process.env.PROMPT2MIDI_DISABLE_MODEL = '1';
 process.env.PROMPT2MIDI_DISABLE_STEMS = '1';
 process.env.PROMPT2MIDI_DISABLE_SUNO = '1';
+process.env.PROMPT2MIDI_DISABLE_LIBROSA = '1';
 
 describe('prompt2midi local API', () => {
   it('starts a prompt-only job and returns producer prompt output', async () => {

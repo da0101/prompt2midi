@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 
 from midi_extraction import write_multitrack_midi, write_note_events_midi
 
@@ -35,10 +36,15 @@ def generate_inspired_loop(
     midi_dir = os.path.join(output_dir, "midi")
     os.makedirs(midi_dir, exist_ok=True)
 
+    _progress(f"composition: generating bass — {key_str} {style}")
     bass = _bass_events(root_midi - 24, bpm, bars)
+    _progress("composition: generating drums")
     drums = _drum_events(bpm, bars)
+    _progress("composition: generating chords")
     chords = _chord_events(root_midi - 12, mode, bpm, bars)
+    _progress("composition: generating melody")
     melody = _melody_events(root_midi, mode, bpm, bars)
+    _progress("composition: writing MIDI files")
 
     paths = {
         "bass": write_note_events_midi(os.path.join(midi_dir, "bass.mid"), bass, bpm),
@@ -49,6 +55,7 @@ def generate_inspired_loop(
             os.path.join(midi_dir, "full_loop.mid"), [bass, drums, chords, melody], bpm
         ),
     }
+    _progress("composition: writing SUNO prompt")
 
     description = {
         "bass": f"syncopated offbeat sub bass in {key_str}, inspired by reference groove",
@@ -77,6 +84,9 @@ def _parse_key(key_string: str) -> tuple[int, str]:
 
 
 def _infer_style(analysis: dict) -> str:
+    genre = analysis.get("genre")
+    if genre and genre.get("primary"):
+        return genre["primary"]
     bpm = float(analysis.get("bpm") or 120.0)
     curve = analysis.get("energy_curve") or []
     avg = sum(pt.get("energy", 0.5) for pt in curve) / max(len(curve), 1)
@@ -87,6 +97,10 @@ def _infer_style(analysis: dict) -> str:
     if bpm >= 85:
         return "Hip-Hop / Trap"
     return "Electronic"
+
+
+def _progress(message: str) -> None:
+    print(f"progress: {message}", file=sys.stderr, flush=True)
 
 
 def _bass_events(root: int, bpm: float, bars: int) -> list[dict]:

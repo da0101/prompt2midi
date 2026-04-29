@@ -209,6 +209,12 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     auto key           = propertyString (analysis, "key");
     auto bpmConfidence = propertyString (analysis, "bpm_confidence");
     auto keyConfidence = propertyString (analysis, "key_confidence");
+    auto genre         = analysis.getDynamicObject()
+                             ? analysis.getDynamicObject()->getProperty ("genre")
+                             : juce::var();
+    auto groove        = analysis.getDynamicObject()
+                             ? analysis.getDynamicObject()->getProperty ("groove")
+                             : juce::var();
 
     juce::String output;
 
@@ -216,26 +222,46 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     output << "Reference Analysis\n";
     output << "BPM: " << (bpm.isNotEmpty() ? bpm : "unknown");
     if (bpmConfidence.isNotEmpty())
-        output << " (" << confidenceLabel (bpmConfidence) << " confidence)";
+        output << "  (" << confidenceLabel (bpmConfidence) << " confidence)";
     output << "\n";
     output << "Key: " << (key.isNotEmpty() ? key : "unknown");
     if (keyConfidence.isNotEmpty())
-        output << " (" << confidenceLabel (keyConfidence) << " confidence)";
-    output << "\n\n";
+        output << "  (" << confidenceLabel (keyConfidence) << " confidence)";
+    output << "\n";
 
+    if (auto* genreObject = genre.getDynamicObject())
+    {
+        auto primary = genreObject->getProperty ("primary").toString();
+        if (primary.isNotEmpty())
+            output << "Genre: " << primary << "\n";
+    }
+
+    if (auto* grooveObject = groove.getDynamicObject())
+    {
+        auto desc = grooveObject->getProperty ("description").toString();
+        if (desc.isNotEmpty())
+            output << "Groove: " << desc << "\n";
+    }
+    output << "\n";
+
+    // Only show warnings that are genuinely user-relevant (filter technical impl notes)
     auto warnings = analysis.getDynamicObject() != nullptr
         ? analysis.getDynamicObject()->getProperty ("warnings")
         : juce::var();
     if (auto* warningArray = warnings.getArray())
     {
+        bool wroteWarning = false;
         for (const auto& w : *warningArray)
         {
             auto text = w.toString();
-            if (text.containsIgnoreCase ("not source-track") || text.containsIgnoreCase ("rough tonal"))
+            if (text.containsIgnoreCase ("Phase 1") || text.containsIgnoreCase ("Phase 2")
+                || text.containsIgnoreCase ("not source-track") || text.containsIgnoreCase ("rough tonal")
+                || text.containsIgnoreCase ("Stem separation skipped"))
                 continue;
             output << "Note: " << text << "\n";
+            wroteWarning = true;
         }
-        if (warningArray->size() > 0)
+        if (wroteWarning)
             output << "\n";
     }
 
