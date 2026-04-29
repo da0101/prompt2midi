@@ -67,7 +67,6 @@ def _build_track_data(
     track_events: list[tuple[int, bytes]] = []
     if include_meta:
         track_events.append((0, b"\xff\x51\x03" + tempo.to_bytes(3, "big")))
-        track_events.append((0, b"\xc0\x20"))
     for event in sorted_events:
         start_tick = _seconds_to_ticks(float(event.get("start", 0.0)), bpm, ticks_per_beat)
         duration = max(0.05, float(event.get("duration", 0.25)))

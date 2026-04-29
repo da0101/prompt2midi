@@ -23,7 +23,6 @@ _DRUM_CH = 9  # GM percussion channel (0-indexed)
 
 def generate_inspired_loop(
     analysis: dict,
-    evidence: dict,
     output_dir: str,
     bars: int = 32,
 ) -> tuple[dict, dict]:
@@ -101,11 +100,12 @@ def _bass_events(root: int, bpm: float, bars: int) -> list[dict]:
         alt = root + 7 if phase >= 1 else root       # 5th at bar 8
         b7 = root + 10 if phase >= 2 else root        # b7 at bar 16
         high = root + 12 if phase >= 3 else root      # octave at bar 24
+        clamp = lambda n: max(24, min(55, n))
         events += [
-            {"start": t + step,     "duration": step * 1.5, "midi_note": root, "velocity": 95},
-            {"start": t + step * 3, "duration": step,       "midi_note": alt if bar % 2 else root, "velocity": 80},
-            {"start": t + step * 4, "duration": step * 1.5, "midi_note": b7,   "velocity": 88},
-            {"start": t + step * 7, "duration": step * 0.8, "midi_note": high,  "velocity": 75},
+            {"start": t + step,     "duration": step * 1.5, "midi_note": clamp(root),                    "velocity": 95},
+            {"start": t + step * 3, "duration": step,       "midi_note": clamp(alt if bar % 2 else root), "velocity": 80},
+            {"start": t + step * 4, "duration": step * 1.5, "midi_note": clamp(b7),                       "velocity": 88},
+            {"start": t + step * 7, "duration": step * 0.8, "midi_note": clamp(high),                     "velocity": 75},
         ]
     return events
 

@@ -49,10 +49,13 @@ class InferStyleTest(unittest.TestCase):
 
 class BassEventsTest(unittest.TestCase):
     def test_bass_stays_in_sub_range(self):
-        events = _bass_events(root=38, bpm=126, bars=32)
-        for event in events:
-            self.assertGreaterEqual(event["midi_note"], 36)
-            self.assertLessEqual(event["midi_note"], 55)
+        # Test multiple roots including the highest (B = root_midi 71, bass root 47)
+        for root in (38, 43, 47):
+            with self.subTest(root=root):
+                events = _bass_events(root=root, bpm=126, bars=32)
+                for event in events:
+                    self.assertGreaterEqual(event["midi_note"], 24)
+                    self.assertLessEqual(event["midi_note"], 55)
 
     def test_bass_root_note_present(self):
         events = _bass_events(root=38, bpm=126, bars=4)
@@ -151,7 +154,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_all_five_midi_files_written(self):
         analysis = self._make_analysis()
-        comp, _ = generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        comp, _ = generate_inspired_loop(analysis, self._tmp, bars=32)
         for track in ("bass", "drums", "chords", "melody", "full_loop"):
             self.assertIn(track, comp["midi"])
             self.assertTrue(os.path.isfile(comp["midi"][track]),
@@ -159,7 +162,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_midi_files_are_valid_midi(self):
         analysis = self._make_analysis()
-        comp, _ = generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        comp, _ = generate_inspired_loop(analysis, self._tmp, bars=32)
         for track, path in comp["midi"].items():
             with open(path, "rb") as f:
                 header = f.read(4)
@@ -167,7 +170,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_full_loop_is_format_1(self):
         analysis = self._make_analysis()
-        comp, _ = generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        comp, _ = generate_inspired_loop(analysis, self._tmp, bars=32)
         with open(comp["midi"]["full_loop"], "rb") as f:
             f.read(8)  # MThd + length
             import struct
@@ -176,7 +179,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_summary_json_written(self):
         analysis = self._make_analysis()
-        generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        generate_inspired_loop(analysis, self._tmp, bars=32)
         summary_path = os.path.join(self._tmp, "summary.json")
         self.assertTrue(os.path.isfile(summary_path))
         with open(summary_path) as f:
@@ -188,7 +191,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_prompt_txt_written(self):
         analysis = self._make_analysis()
-        _, suno = generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        _, suno = generate_inspired_loop(analysis, self._tmp, bars=32)
         self.assertTrue(os.path.isfile(suno["path"]))
         self.assertIn("D minor", suno["text"])
         self.assertGreater(len(suno["text"]), 50)
@@ -197,7 +200,7 @@ class GenerateInspiredLoopTest(unittest.TestCase):
         bpm = 120.0
         bars = 32
         analysis = self._make_analysis(bpm=bpm)
-        comp, _ = generate_inspired_loop(analysis, analysis, self._tmp, bars=bars)
+        comp, _ = generate_inspired_loop(analysis, self._tmp, bars=bars)
         expected_duration = bars * 4 * 60.0 / bpm
         bass_events = _bass_events(root=38, bpm=bpm, bars=bars)
         actual_last = max(e["start"] + e["duration"] for e in bass_events)
@@ -205,16 +208,18 @@ class GenerateInspiredLoopTest(unittest.TestCase):
 
     def test_composition_dict_has_required_keys(self):
         analysis = self._make_analysis()
-        comp, suno = generate_inspired_loop(analysis, analysis, self._tmp, bars=32)
+        comp, suno = generate_inspired_loop(analysis, self._tmp, bars=32)
         for key in ("bars", "bpm", "key", "style", "midi", "description"):
             self.assertIn(key, comp)
         self.assertIn("text", suno)
         self.assertIn("path", suno)
 
     def test_major_key_generates_major_chords(self):
-        analysis = self._make_analysis(key="C major")
-        comp, _ = generate_inspired_loop(analysis, analysis, self._tmp, bars=4)
-        self.assertTrue(os.path.isfile(comp["midi"]["chords"]))
+        # Imaj7 from C3=48: C=48, E=52 (major third), G=55, B=59
+        events = _chord_events(root=48, mode="major", bpm=120, bars=4)
+        notes = {e["midi_note"] for e in events}
+        self.assertIn(52, notes, "major third (E) missing from C major chord")
+        self.assertNotIn(51, notes, "minor third (Eb) should not appear in C major")
 
 
 if __name__ == "__main__":

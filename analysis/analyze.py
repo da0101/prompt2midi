@@ -91,7 +91,6 @@ def run(audio_path: str, output_dir: str) -> dict:
     exports_dir = os.path.join(output_dir, "exports")
     composition, suno_prompt = generate_inspired_loop(
         analysis=analysis,
-        evidence=analysis,
         output_dir=exports_dir,
         bars=32,
     )
@@ -125,6 +124,7 @@ def run(audio_path: str, output_dir: str) -> dict:
         "export_files": export_files,
         "midi_assets": midi_assets,
         "midi_notes": [
+            "exports/midi/ contains the generated loop package: bass, drums, chords, melody, full_loop — original compositions inspired by the reference, not transcriptions.",
             "reference-sketch.mid is generated from estimated BPM/key only.",
             "model-transcription.mid is produced by Basic Pitch when the local engine is installed.",
             "source-bass-transcription.mid is produced from a separated bass stem when Demucs and Basic Pitch are installed.",

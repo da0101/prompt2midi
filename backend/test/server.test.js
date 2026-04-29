@@ -31,6 +31,7 @@ describe('prompt2midi local API', () => {
       assert.equal(result.body.result.analysis.bpm, 124);
       assert.equal(result.body.result.analysis.key, 'A minor');
       assert.match(result.body.result.interpretation.ai_music_prompt, /124 BPM/);
+      assert.equal(result.body.result.composition, null, 'prompt-only job should have no composition');
     } finally {
       await close(server);
     }
@@ -101,6 +102,20 @@ describe('prompt2midi local API', () => {
       assert.ok(result.body.result.midi_files.bass_transcription.endsWith('bass-transcription.mid'));
       assert.ok(fs.existsSync(result.body.result.midi_files.bass_transcription));
       assert.match(result.body.result.midi_notes.join(' '), /experimental monophonic/i);
+
+      // composition package
+      const comp = result.body.result.composition;
+      assert.ok(comp, 'composition key missing from result');
+      assert.ok(comp.bars === 32);
+      assert.ok(comp.bpm > 0);
+      assert.ok(typeof comp.key === 'string');
+      assert.ok(typeof comp.style === 'string');
+      for (const track of ['bass', 'drums', 'chords', 'melody', 'full_loop']) {
+        assert.ok(comp.midi[track], `composition.midi.${track} missing`);
+        assert.ok(fs.existsSync(comp.midi[track]), `${track}.mid not on disk`);
+      }
+      assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text);
+      assert.ok(result.body.result.export_dir);
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });
