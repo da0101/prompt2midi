@@ -3,8 +3,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-// Model ID is stable as of 2026-04; update when Gemini deprecates this version.
-const DEFAULT_MODEL = 'gemini-2.5-pro';
+// gemini-2.0-flash: generous free-tier quota, fast. Override via PROMPT2MIDI_GEMINI_MODEL.
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 const GEMINI_TIMEOUT_MS = 20_000;
 
 const SYSTEM_INSTRUCTION = `You are a music production expert writing a SUNO AI prompt.
