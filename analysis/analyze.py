@@ -18,7 +18,7 @@ from source_transcription import can_run_model_transcription, transcribe_with_mo
 from stem_separation import separate_for_transcription
 
 
-def run(audio_path: str, output_dir: str) -> dict:
+def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
     _progress("feature extraction: reading audio and estimating BPM/key/energy")
     analysis = analyze_wav(audio_path)
     os.makedirs(output_dir, exist_ok=True)
@@ -104,6 +104,9 @@ def run(audio_path: str, output_dir: str) -> dict:
 
     export_files = _promote_exports(output_dir, midi_files, midi_assets)
 
+    if user_prompt:
+        analysis["user_direction"] = user_prompt
+
     _progress("composition: generating inspired 32-bar loop")
     exports_dir = os.path.join(output_dir, "exports")
     composition, suno_prompt = generate_inspired_loop(
@@ -155,10 +158,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run prompt2midi local analysis.")
     parser.add_argument("--audio", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--user-prompt", default="")
     args = parser.parse_args()
 
     try:
-        payload = run(args.audio, args.output_dir)
+        payload = run(args.audio, args.output_dir, user_prompt=args.user_prompt)
     except AnalysisError as exc:
         payload = {"ok": False, "error": {"code": exc.code, "message": exc.message}}
     except Exception as exc:  # Defensive boundary for the Node bridge.

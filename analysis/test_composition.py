@@ -69,17 +69,22 @@ class EnhancedAnalysisFallbackTest(unittest.TestCase):
 
 
 class InferStyleTest(unittest.TestCase):
-    def test_minimal_house_range(self):
-        style = _infer_style({"bpm": 125, "energy_curve": [{"energy": 0.3}]})
-        self.assertEqual(style, "Minimal House")
+    def test_club_bpm_range(self):
+        style = _infer_style({"bpm": 125})
+        self.assertIn("125", style)
+        self.assertIn("Electronic", style)
 
-    def test_techno_range(self):
+    def test_fast_bpm_range(self):
         style = _infer_style({"bpm": 140})
-        self.assertEqual(style, "Techno")
+        self.assertIn("Electronic", style)
 
-    def test_uses_genre_dict_when_present(self):
-        style = _infer_style({"bpm": 90, "genre": {"primary": "Deep House"}})
-        self.assertEqual(style, "Deep House")
+    def test_user_direction_takes_priority(self):
+        style = _infer_style({"bpm": 90, "user_direction": "synth wave"})
+        self.assertEqual(style, "synth wave")
+
+    def test_user_direction_overrides_bpm(self):
+        style = _infer_style({"bpm": 125, "user_direction": "dark techno"})
+        self.assertEqual(style, "dark techno")
 
 
 class BassEventsTest(unittest.TestCase):

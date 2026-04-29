@@ -114,7 +114,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator, sunoGenerat
       log.done('01 validate input');
       jobs.update(jobId, { progress: 35, message: 'Analyzing reference features.' });
       log.stage('02 audio analysis', 'decode, features, MIDI extraction');
-      analysisPayload = await analyzer(input.audioPath, jobId, log);
+      analysisPayload = await analyzer(input.audioPath, jobId, log, input.prompt);
       log.done('02 audio analysis', `${Object.keys(analysisPayload.midi_files || {}).length} MIDI file(s)`);
     } else {
       log.stage('01 prompt-only analysis');

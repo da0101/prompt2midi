@@ -86,19 +86,20 @@ def _parse_key(key_string: str) -> tuple[int, str]:
 
 
 def _infer_style(analysis: dict) -> str:
-    genre = analysis.get("genre")
-    if genre and genre.get("primary"):
-        return genre["primary"]
+    """Return a style label. Uses user-provided direction if present, else neutral BPM category."""
+    user_direction = str(analysis.get("user_direction") or "").strip()
+    if user_direction:
+        return user_direction[:40]  # truncate if very long
     bpm = float(analysis.get("bpm") or 120.0)
-    curve = analysis.get("energy_curve") or []
-    avg = sum(pt.get("energy", 0.5) for pt in curve) / max(len(curve), 1)
-    if 115 <= bpm <= 135:
-        return "Minimal House" if avg < 0.5 else "House"
-    if bpm > 135:
-        return "Techno"
-    if bpm >= 85:
-        return "Hip-Hop / Trap"
-    return "Electronic"
+    if bpm >= 150:
+        return f"Fast Electronic ({round(bpm)} BPM)"
+    if bpm >= 130:
+        return f"Driving Electronic ({round(bpm)} BPM)"
+    if bpm >= 110:
+        return f"Club Electronic ({round(bpm)} BPM)"
+    if bpm >= 90:
+        return f"Mid-Tempo Electronic ({round(bpm)} BPM)"
+    return f"Downtempo Electronic ({round(bpm)} BPM)"
 
 
 def _progress(message: str) -> None:

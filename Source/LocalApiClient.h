@@ -182,7 +182,12 @@ inline juce::String summarizeComposition (const juce::var& composition, juce::St
     {
         promptForClipboard = sunoObject->getProperty ("text").toString();
         if (promptForClipboard.isNotEmpty())
-            output << "SUNO Prompt:\n" << promptForClipboard << "\n\n";
+        {
+            output << "─────────────────────────────────────\n";
+            output << "SUNO Prompt  (copy and paste into SUNO)\n";
+            output << "─────────────────────────────────────\n";
+            output << promptForClipboard << "\n";
+        }
     }
 
     return output;
@@ -232,8 +237,14 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     if (auto* genreObject = genre.getDynamicObject())
     {
         auto primary = genreObject->getProperty ("primary").toString();
+        auto method  = genreObject->getProperty ("method").toString();
         if (primary.isNotEmpty())
-            output << "Genre: " << primary << "\n";
+        {
+            output << "Tempo range: " << primary;
+            if (method.containsIgnoreCase ("bpm_range"))
+                output << "  (BPM estimate — actual genre unknown without classifier)";
+            output << "\n";
+        }
     }
 
     if (auto* grooveObject = groove.getDynamicObject())
@@ -279,12 +290,6 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
         promptForClipboard = aiPrompt;
         output << "Producer insight:\n" << summary << "\n\n";
         output << "AI music prompt:\n" << aiPrompt << "\n\n";
-    }
-
-    if (auto* notes = midiNotes.getArray())
-    {
-        for (const auto& note : *notes)
-            output << "Note: " << note.toString() << "\n";
     }
 
     return output;

@@ -65,40 +65,28 @@ def better_key(audio_path: str, fallback_key: str | None, fallback_confidence: f
 
 
 def infer_genre(analysis: dict) -> dict:
-    """Heuristic genre tags from BPM, energy, and spectral features. No ML deps required."""
+    """Rough BPM-range bucket — not a real genre classifier.
+
+    BPM alone cannot identify genre reliably. This returns a low-confidence tempo
+    category used only as a loose hint for composition style. It should never be
+    shown to the user as a definitive genre label.
+    """
     bpm = float(analysis.get("bpm") or 120.0)
-    curve = analysis.get("energy_curve") or []
-    avg_energy = sum(pt.get("energy", 0.5) for pt in curve) / max(len(curve), 1)
-    zcr = (analysis.get("spectral_features") or {}).get("zero_crossing_rate", 0.1)
 
     if 115 <= bpm <= 135:
-        if avg_energy < 0.35 or zcr < 0.07:
-            primary, tags = "Minimal House", ["minimal", "house", "deep", "club", "4/4"]
-        elif avg_energy < 0.55:
-            primary, tags = "Deep House", ["deep house", "house", "soulful", "club"]
-        else:
-            primary, tags = "House", ["house", "electronic", "4/4", "club", "driving"]
-        confidence = 0.68
-    elif 135 < bpm <= 150:
-        primary, tags = "Techno", ["techno", "electronic", "dark", "driving", "industrial"]
-        confidence = 0.65
-    elif bpm > 150:
-        primary, tags = "Hard Techno", ["hard techno", "industrial", "rave", "driving"]
-        confidence = 0.60
+        primary, tags = "Electronic (120-135 BPM)", ["electronic", "4/4", "club"]
+    elif 135 < bpm <= 155:
+        primary, tags = "Electronic (135-155 BPM)", ["electronic", "driving", "4/4"]
+    elif bpm > 155:
+        primary, tags = "Electronic (fast)", ["electronic", "high-energy"]
     elif 90 <= bpm < 115:
-        if zcr > 0.14 or avg_energy > 0.55:
-            primary, tags = "Trap", ["trap", "hip-hop", "urban", "808", "hard"]
-        else:
-            primary, tags = "Hip-Hop", ["hip-hop", "lo-fi", "boom bap", "chill"]
-        confidence = 0.58
+        primary, tags = "Electronic (90-115 BPM)", ["electronic", "mid-tempo"]
     elif 70 <= bpm < 90:
-        primary, tags = "Lo-Fi / Chill", ["lo-fi", "chill", "ambient", "relaxed"]
-        confidence = 0.52
+        primary, tags = "Electronic (slow)", ["electronic", "downtempo"]
     else:
-        primary, tags = "Electronic", ["electronic", "instrumental"]
-        confidence = 0.40
+        primary, tags = "Electronic", ["electronic"]
 
-    return {"primary": primary, "tags": tags, "confidence": round(confidence, 2)}
+    return {"primary": primary, "tags": tags, "confidence": 0.2, "method": "bpm_range_only"}
 
 
 def estimate_groove(analysis: dict) -> dict:
