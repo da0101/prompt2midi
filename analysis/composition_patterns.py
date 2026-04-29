@@ -34,30 +34,41 @@ def _bass_events(root: int, bpm: float, bars: int, style: str, rng: random.Rando
     step = bar_s / 16.0  # 1/16th note
     events: list[dict] = []
 
+    # Scale tones available to every style (minor pentatonic + b7 + chromatic approach)
+    scale_pool = [_clamp_bass(root + ivl) for ivl in [0, 3, 5, 7, 10, 12, -2, 15]]
+
     if style == "synth_wave":
-        # Smooth ascending/descending arp through root/3rd/5th
-        arp = [root, root + 3, root + 7, root + 10, root + 12, root + 7, root + 3, root]
-        arp = [_clamp_bass(n) for n in arp]
+        # Arp shape chosen fresh each run from 4 different shapes
+        arp_shapes = [
+            [0, 3, 7, 10, 12, 10, 7, 3],
+            [0, 7, 10, 12, 10, 7, 3, 0],
+            [0, 3, 5, 7, 10, 12, 7, 5],
+            [0, 5, 7, 10, 7, 5, 3, 0],
+        ]
+        shape = rng.choice(arp_shapes)
+        arp = [_clamp_bass(root + ivl) for ivl in shape]
         vel_base = rng.randint(72, 88)
         for bar in range(bars):
             t = bar * bar_s
-            pattern_offset = rng.randint(0, 2)
+            pattern_offset = rng.randint(0, len(arp) - 1)
             for i, pos in enumerate([0, 2, 4, 6, 8, 10, 12, 14]):
                 note = arp[(i + pattern_offset) % len(arp)]
                 vel = max(50, min(100, vel_base + rng.randint(-6, 6)))
                 events.append({"start": t + pos * step, "duration": step * 1.8, "midi_note": note, "velocity": vel})
 
     elif style == "hip_hop":
-        # Sparse 808-style: root on beat 1, occasional accent
+        # 808-style: root anchors, passing notes vary each bar
         vel_base = rng.randint(88, 100)
         for bar in range(bars):
             t = bar * bar_s
             positions = rng.choice([[0, 8], [0, 6, 8], [0, 8, 12], [0]])
-            root_note = _clamp_bass(root)
-            for pos in positions:
+            # Pick a different scale tone for non-root hits each bar
+            accent = rng.choice(scale_pool)
+            for i, pos in enumerate(positions):
+                note = _clamp_bass(root) if i == 0 else accent
                 vel = max(70, vel_base + rng.randint(-8, 8))
                 dur = step * rng.choice([4, 6, 8])
-                events.append({"start": t + pos * step, "duration": dur, "midi_note": root_note, "velocity": vel})
+                events.append({"start": t + pos * step, "duration": dur, "midi_note": note, "velocity": vel})
 
     elif style == "ambient":
         # Long sustained notes, very sparse
@@ -69,23 +80,24 @@ def _bass_events(root: int, bpm: float, bars: int, style: str, rng: random.Rando
                 events.append({"start": t, "duration": bar_s * 2 * 0.92, "midi_note": note, "velocity": vel})
 
     else:
-        # house / techno: offbeat syncopated
-        phase_notes = [root, root + 7, root + 10, root + 12]
+        # house / techno: offbeat syncopated with randomly chosen passing notes per bar
+        step8 = bar_s / 8.0
+        r = _clamp_bass(root)
         for bar in range(bars):
             t = bar * bar_s
-            phase = bar // 8
-            step8 = bar_s / 8.0
-            alt = _clamp_bass(phase_notes[min(phase, 1)])
-            b7  = _clamp_bass(phase_notes[min(phase, 2)])
-            high = _clamp_bass(phase_notes[min(phase, 3)])
+            # Pick 3 scale tones randomly — different pitches every bar, every run
+            n1 = rng.choice(scale_pool)
+            n2 = rng.choice(scale_pool)
+            n3 = rng.choice(scale_pool)
             vel_root = rng.randint(88, 98)
             pattern = rng.choice([
-                [(1, step8 * 1.5, root, vel_root), (3, step8, alt if bar%2 else root, 80), (4, step8 * 1.5, b7, 88), (7, step8 * 0.8, high, 75)],
-                [(0, step8 * 2, root, vel_root), (3, step8, root, 78), (5, step8 * 1.5, b7, 85), (7, step8, high, 72)],
-                [(1, step8 * 1.5, root, vel_root), (4, step8 * 2, alt, 85), (7, step8, root, 75)],
+                [(1, step8*1.5, r,  vel_root), (3, step8,   n1, 80), (5, step8*1.5, n2, 85), (7, step8*0.8, n3, 75)],
+                [(0, step8*2,   r,  vel_root), (3, step8,   n1, 78), (5, step8*1.5, n2, 82), (7, step8,     n3, 72)],
+                [(1, step8*1.5, r,  vel_root), (4, step8*2, n1, 85), (7, step8,     n2, 75)],
+                [(0, step8*1.5, r,  vel_root), (2, step8,   n1, 78), (4, step8*1.5, n2, 84), (6, step8,     n3, 70)],
             ])
             for pos, dur, note, vel in pattern:
-                events.append({"start": t + pos * step8, "duration": dur, "midi_note": _clamp_bass(note), "velocity": max(60, vel + rng.randint(-5, 5))})
+                events.append({"start": t + pos*step8, "duration": dur, "midi_note": _clamp_bass(note), "velocity": max(60, vel + rng.randint(-5, 5))})
     return events
 
 
