@@ -10,12 +10,16 @@ import shutil
 import sys
 
 from bass_transcription import transcribe_bassline
+from chord_detection import detect_chords
 from composition import generate_inspired_loop
+from drum_analysis import analyze_drums
 from enhanced_analysis import better_bpm, better_key, estimate_groove, infer_genre
 from feature_extraction import AnalysisError, analyze_wav
+from genre_detection import detect_genre
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from source_transcription import can_run_model_transcription, transcribe_with_model
 from stem_separation import separate_for_transcription
+from structure_analysis import analyze_structure
 
 
 def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
@@ -38,6 +42,17 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
 
     analysis["genre"] = infer_genre(analysis)
     analysis["groove"] = estimate_groove(analysis)
+
+    _progress("deep analysis: detecting genre, chords, structure")
+    analysis["genre_deep"] = detect_genre(audio_path)
+    if analysis["genre_deep"]["confidence"] > 0.3:
+        analysis["genre"] = {
+            "primary": analysis["genre_deep"]["primary"],
+            "tags": analysis["genre_deep"]["tags"],
+            "confidence": analysis["genre_deep"]["confidence"],
+        }
+    analysis["chords"] = detect_chords(audio_path, analysis.get("bpm") or 120.0)
+    analysis["structure"] = analyze_structure(audio_path, analysis.get("bpm") or 120.0)
 
     _progress("midi sketch: writing reference-sketch.mid from estimated BPM/key")
     sketch_path = write_reference_sketch_midi(
@@ -62,6 +77,9 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
     ]
 
     stems = separate_for_transcription(audio_path, output_dir) if can_run_model_transcription() else _skipped_stems()
+    drum_stem = (stems.get("stems") or {}).get("drums")
+    _progress("deep analysis: analyzing drum pattern from stem")
+    analysis["drums"] = analyze_drums(drum_stem, analysis.get("bpm") or 120.0)
     model = transcribe_with_model(audio_path, output_dir, analysis.get("bpm"), stems)
     for track in model["tracks"]:
         midi_files[track["key"]] = track["path"]

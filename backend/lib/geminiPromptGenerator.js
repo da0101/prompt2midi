@@ -29,8 +29,22 @@ async function generateSunoPrompt({ analysis, composition, exportDir, userPrompt
     bpm: composition.bpm,
     key: composition.key,
     bars: composition.bars,
-    genre: analysis.genre || null,
+    // Genre: use deep detection if confident, else BPM range
+    genre: (analysis.genre_deep && analysis.genre_deep.confidence > 0.3)
+      ? analysis.genre_deep
+      : (analysis.genre || null),
     groove: analysis.groove || null,
+    // Detected chord progression from reference (empty = not detected)
+    detected_chords: (analysis.chords && analysis.chords.progression) || [],
+    // Drum feel from reference stem analysis
+    drum_feel: analysis.drums
+      ? { tempo_feel: analysis.drums.tempo_feel, density: analysis.drums.density, swing: analysis.drums.swing }
+      : null,
+    // Track structure
+    structure: analysis.structure
+      ? { arrangement_arc: analysis.structure.arrangement_arc, energy_profile: analysis.structure.energy_profile, section_count: analysis.structure.section_count }
+      : null,
+    // Composition descriptions
     bass: (composition.description || {}).bass,
     drums: (composition.description || {}).drums,
     chords: (composition.description || {}).chords,

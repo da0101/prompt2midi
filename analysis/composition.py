@@ -37,12 +37,17 @@ def generate_inspired_loop(
     midi_dir = os.path.join(output_dir, "midi")
     os.makedirs(midi_dir, exist_ok=True)
 
+    detected_chords = (analysis.get("chords") or {}).get("progression") or []
+    detected_drums = analysis.get("drums") or {}
+
     _progress(f"composition: generating bass — {key_str} {style}")
     bass = _bass_events(root_midi - 24, bpm, bars)
     _progress("composition: generating drums")
-    drums = _drum_events(bpm, bars)
+    drums = (_drum_events_from_pattern(detected_drums, bpm, bars)
+             if detected_drums.get("kick") else _drum_events(bpm, bars))
     _progress("composition: generating chords")
-    chords = _chord_events(root_midi - 12, mode, bpm, bars)
+    chords = (_chord_events_from_progression(detected_chords, bpm, bars)
+              if len(detected_chords) >= 2 else _chord_events(root_midi - 12, mode, bpm, bars))
     _progress("composition: generating melody")
     melody = _melody_events(root_midi, mode, bpm, bars)
     _progress("composition: writing MIDI files")
@@ -59,10 +64,16 @@ def generate_inspired_loop(
     _progress("composition: writing SUNO prompt")
 
     chord_quality = "minor seventh" if mode == "minor" else "major seventh"
+    chord_desc = (f"chord progression {' → '.join(detected_chords[:4])} from reference"
+                  if len(detected_chords) >= 2 else f"{chord_quality} stabs in {key_str}")
+    drum_feel = detected_drums.get("tempo_feel", "tight") if detected_drums.get("kick") else "tight"
+    drum_density = detected_drums.get("density", "medium") if detected_drums.get("kick") else "medium"
+    drum_desc = (f"drum pattern from reference — {drum_feel} feel, {drum_density} density"
+                 if detected_drums.get("kick") else "four-on-floor kick with 16th hats, clap on 2 and 4")
     description = {
         "bass": f"syncopated offbeat sub bass in {key_str}, inspired by reference groove",
-        "drums": "four-on-floor kick with 16th hats, clap on 2 and 4, sparse open hat offbeats",
-        "chords": f"{chord_quality} stabs in {key_str} with restrained voice movement",
+        "drums": drum_desc,
+        "chords": chord_desc,
         "melody": f"sparse pentatonic motif in {key_str} with call-response variation",
     }
     composition = {
@@ -208,6 +219,78 @@ def _melody_events(root: int, mode: str, bpm: float, bars: int) -> list[dict]:
                 "midi_note": max(48, min(96, note)),
                 "velocity": vel,
             })
+    return events
+
+
+_CHORD_ROOT: dict[str, int] = {
+    "C": 48, "C#": 49, "Db": 49, "D": 50, "D#": 51, "Eb": 51,
+    "E": 52, "F": 53, "F#": 54, "Gb": 54, "G": 55, "G#": 56,
+    "Ab": 56, "A": 57, "A#": 58, "Bb": 58, "B": 59,
+}
+
+
+def _parse_chord(name: str) -> list[int]:
+    """Return MIDI note offsets from root for a chord name like 'Am7', 'F', 'C#m'."""
+    for root in sorted(_CHORD_ROOT, key=len, reverse=True):
+        if name.startswith(root):
+            quality = name[len(root):]
+            base = _CHORD_ROOT[root]
+            if "maj7" in quality or "M7" in quality:
+                return [base, base + 4, base + 7, base + 11]
+            if "m7" in quality or ("m" in quality and "7" in quality):
+                return [base, base + 3, base + 7, base + 10]
+            if "m" in quality or "min" in quality:
+                return [base, base + 3, base + 7, base + 10]
+            if "7" in quality:
+                return [base, base + 4, base + 7, base + 10]
+            if "sus4" in quality:
+                return [base, base + 5, base + 7]
+            if "sus2" in quality:
+                return [base, base + 2, base + 7]
+            # default: major 7th voicing
+            return [base, base + 4, base + 7, base + 11]
+    return [48, 52, 55, 59]  # C major 7th fallback
+
+
+def _chord_events_from_progression(progression: list[str], bpm: float, bars: int) -> list[dict]:
+    """Build chord stabs from detected chord progression (e.g. ['Am', 'F', 'C', 'G'])."""
+    bar_s = 4.0 * 60.0 / bpm
+    half = bar_s / 2.0
+    events: list[dict] = []
+    n = len(progression)
+    for bar in range(bars):
+        chord_name = progression[bar % n]
+        notes = _parse_chord(chord_name)
+        vel = 85 if bar % 2 == 0 else 78
+        for note in notes:
+            n_clamped = max(36, min(96, note))
+            events += [
+                {"start": bar * bar_s,        "duration": half * 0.9, "midi_note": n_clamped, "velocity": vel},
+                {"start": bar * bar_s + half,  "duration": half * 0.9, "midi_note": n_clamped, "velocity": vel - 8},
+            ]
+    return events
+
+
+def _drum_events_from_pattern(detected: dict, bpm: float, bars: int) -> list[dict]:
+    """Build drum MIDI from detected kick/snare/hat 16th-note grid positions."""
+    bar_s = 4.0 * 60.0 / bpm
+    s16 = bar_s / 16.0
+    kick_pos = detected.get("kick") or []
+    snare_pos = detected.get("snare") or []
+    hat_pos = detected.get("hat") or []
+    hat_vel = [85, 60, 75, 55, 90, 58, 70, 52, 88, 62, 72, 50, 92, 60, 68, 55]
+    events: list[dict] = []
+    for bar in range(bars):
+        t = bar * bar_s
+        for pos in kick_pos:
+            events.append({"start": t + pos * s16, "duration": s16, "midi_note": _KICK, "velocity": 100, "channel": _DRUM_CH})
+        for pos in snare_pos:
+            events.append({"start": t + pos * s16, "duration": s16, "midi_note": _CLAP, "velocity": 85, "channel": _DRUM_CH})
+        for pos in hat_pos:
+            vel = hat_vel[pos % len(hat_vel)]
+            events.append({"start": t + pos * s16, "duration": s16 * 0.6, "midi_note": _HAT_CLOSED, "velocity": vel, "channel": _DRUM_CH})
+        if bar % 8 == 7:
+            events.append({"start": t + bar_s * 0.9375, "duration": s16 * 0.5, "midi_note": _SNARE, "velocity": 65, "channel": _DRUM_CH})
     return events
 
 
