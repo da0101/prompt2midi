@@ -12,14 +12,14 @@ _clamp_bass = lambda n: max(24, min(55, n))
 
 # ── Kick patterns (16th-note positions 0-15 per bar) ──────────────────────────
 _KICK_PATTERNS = {
-    "house":      [[0, 4, 8, 12], [0, 4, 8, 12], [0, 3, 8, 12]],
+    "house":      [[0, 4, 8, 12], [0, 3, 8, 11], [0, 4, 8, 10, 12]],
     "synth_wave": [[0, 8],        [0, 6, 8],      [0, 8, 10]],
     "hip_hop":    [[0, 6, 10],    [0, 5, 8],      [0, 3, 8, 11]],
-    "techno":     [[0, 4, 8, 12], [0, 4, 8, 12],  [0, 2, 4, 8, 10, 12]],
+    "techno":     [[0, 4, 8, 12], [0, 2, 4, 8, 10, 12], [0, 4, 6, 8, 12, 14]],
     "ambient":    [[0, 8],        [0],             []],
 }
 _HAT_PATTERNS = {
-    "house":      [list(range(16)), list(range(16)), [0,2,4,6,8,10,12,14]],
+    "house":      [list(range(16)), [0,2,4,6,8,10,12,14], [0,1,2,4,6,8,9,10,12,14]],
     "synth_wave": [[0,2,4,6,8,10,12,14], [0,4,8,12], [0,2,4,6,8,10,12,14]],
     "hip_hop":    [[0,1,2,4,6,8,10,12,14], [0,2,6,10,14], [0,4,6,8,14]],
     "techno":     [list(range(16)), list(range(16)), [0,2,4,6,8,10,12,14]],
@@ -95,20 +95,30 @@ def _drum_events(bpm: float, bars: int, style: str, rng: random.Random, detected
     events: list[dict] = []
 
     if detected and detected.get("kick") and detected.get("method") != "unavailable":
-        kick_pos = detected["kick"]
-        snare_pos = detected.get("snare") or _SNARE_ON_2_4
-        hat_pos = detected.get("hat") or list(range(16))
+        fixed_kick = detected["kick"]
+        fixed_snare = detected.get("snare") or _SNARE_ON_2_4
+        fixed_hat = detected.get("hat") or list(range(16))
+        rotate_patterns = False
     else:
-        kick_pos = rng.choice(_KICK_PATTERNS.get(style, _KICK_PATTERNS["house"]))
-        snare_pos = _SNARE_HH_TRAP if style == "hip_hop" else _SNARE_ON_2_4
-        hat_pos = rng.choice(_HAT_PATTERNS.get(style, _HAT_PATTERNS["house"]))
+        fixed_kick = None
+        fixed_snare = _SNARE_HH_TRAP if style == "hip_hop" else _SNARE_ON_2_4
+        fixed_hat = None
+        rotate_patterns = True
 
     hat_vel_table = [85, 60, 75, 55, 90, 58, 70, 52, 88, 62, 72, 50, 92, 60, 68, 55]
     kick_vel = rng.randint(90, 100)
     clap_vel = rng.randint(78, 90)
     open_hat = rng.random() > 0.4
 
+    kick_pos = fixed_kick or rng.choice(_KICK_PATTERNS.get(style, _KICK_PATTERNS["house"]))
+    hat_pos = fixed_hat or rng.choice(_HAT_PATTERNS.get(style, _HAT_PATTERNS["house"]))
+    snare_pos = fixed_snare
+
     for bar in range(bars):
+        # Rotate kick/hat pattern at every 8-bar section boundary for structural variety
+        if rotate_patterns and bar > 0 and bar % 8 == 0:
+            kick_pos = rng.choice(_KICK_PATTERNS.get(style, _KICK_PATTERNS["house"]))
+            hat_pos = rng.choice(_HAT_PATTERNS.get(style, _HAT_PATTERNS["house"]))
         t = bar * bar_s
         for pos in kick_pos:
             events.append({"start": t + pos * s16, "duration": s16, "midi_note": _KICK,
@@ -182,16 +192,28 @@ def _chord_events(root: int, mode: str, bpm: float, bars: int, style: str, rng: 
     if progression and len(progression) >= 2:
         chord_sets = [_parse_chord(c) for c in progression]
         n = len(chord_sets)
+        # Pick a rhythmic feel for this section; rotate every 8 bars
+        rhythm_options = ["half_bar", "quarter_bar", "downbeat_only", "offbeat"]
+        section_rhythm = rng.choice(rhythm_options)
         for bar in range(bars):
+            if bar % 8 == 0 and bar > 0:
+                section_rhythm = rng.choice(rhythm_options)
             t = bar * bar_s
             notes = chord_sets[bar % n]
             vel = vel_base + rng.randint(-6, 6)
-            repeat = max(1, int(bar_s / dur))
-            for rep in range(repeat):
+            if section_rhythm == "downbeat_only":
+                offsets = [0.0]
+            elif section_rhythm == "quarter_bar":
+                offsets = [0.0, bar_s * 0.25, bar_s * 0.5, bar_s * 0.75]
+            elif section_rhythm == "offbeat":
+                offsets = [bar_s * 0.25, bar_s * 0.75]
+            else:  # half_bar
+                offsets = [0.0, bar_s * 0.5]
+            for i, off in enumerate(offsets):
                 for note in notes:
                     n_clamped = max(36, min(96, note))
-                    events.append({"start": t + rep*(bar_s/repeat), "duration": dur * 0.95,
-                                   "midi_note": n_clamped, "velocity": vel - rep*5})
+                    events.append({"start": t + off, "duration": dur * 0.9,
+                                   "midi_note": n_clamped, "velocity": max(40, vel - i * 4)})
     else:
         progs = _MINOR_PROGRESSIONS if mode == "minor" else _MAJOR_PROGRESSIONS
         chord_intervals = rng.choice(progs)
@@ -243,14 +265,18 @@ def _melody_events(root: int, mode: str, bpm: float, bars: int, style: str, rng:
         return events
 
     # Default sparse motif (house/hip-hop/techno) with variation
+    # Three motifs: sparse call-response, mid-density, dense staccato
     motif_pool = [
         [(0.0,0,0.75,78), (1.5,2,0.5,70), (2.5,1,0.75,74), (4.0,3,0.5,66), (5.0,0,0.75,72), (7.0,4,0.5,63)],
         [(0.0,1,0.75,78), (2.0,3,0.5,70), (3.5,0,0.75,74), (5.0,2,0.5,68), (6.5,4,0.5,65)],
-        [(0.5,0,0.75,76), (2.5,2,0.75,70), (4.5,1,0.5,72), (6.0,3,0.5,65), (7.5,0,0.3,60)],
+        [(0.5,0,0.4,76), (1.5,2,0.4,70), (2.5,1,0.4,74), (3.5,3,0.4,68), (4.5,4,0.4,72), (5.5,0,0.4,65), (6.5,2,0.4,62), (7.5,1,0.3,58)],
     ]
-    motif = rng.choice(motif_pool)
     events = []
+    motif = rng.choice(motif_pool)
     for bar in range(0, bars, 2):
+        # Rotate motif every 8 bars so sections sound distinct
+        if bar % 8 == 0 and bar > 0:
+            motif = rng.choice(motif_pool)
         t = bar * bar_s
         phase = (bar // 4) % 4
         for beat_off, note_idx, dur_beats, vel in motif:
