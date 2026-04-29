@@ -45,7 +45,7 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
 
     _progress("deep analysis: detecting genre, chords, structure")
     analysis["genre_deep"] = detect_genre(audio_path)
-    if analysis["genre_deep"]["confidence"] > 0.3:
+    if analysis["genre_deep"]["confidence"] > 0.12:
         analysis["genre"] = {
             "primary": analysis["genre_deep"]["primary"],
             "tags": analysis["genre_deep"]["tags"],
