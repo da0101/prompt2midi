@@ -35,6 +35,10 @@ __pycache__/
 # prompt2midi local runtime
 tmp/
 
+# Secrets — never commit
+.env
+.env.local
+
 # agentboard:runtime-begin
 .platform/events.jsonl
 .platform/events-*.jsonl

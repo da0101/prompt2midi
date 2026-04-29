@@ -9,7 +9,7 @@
     "dev:refresh": "bash scripts/dev-refresh.sh",
     "setup:stems": "bash scripts/setup-stem-engine.sh",
     "setup:transcription": "bash scripts/setup-transcription-engine.sh",
-    "start": "node backend/server.js",
+    "start": "node --env-file=.env backend/server.js",
     "test": "node --test backend/test/*.test.js"
   },
   "engines": {
