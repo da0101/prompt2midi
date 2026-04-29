@@ -6,6 +6,7 @@ const { validateAudioPath } = require('./lib/audioInput');
 const { createJobStore } = require('./lib/jobs');
 const { runAnalysis } = require('./lib/pythonRunner');
 const { buildPromptPackage } = require('./lib/promptGenerator');
+const { generateSunoPrompt } = require('./lib/geminiPromptGenerator');
 const { createPipelineLogger } = require('./lib/devLogger');
 
 const DEFAULT_PORT = Number.parseInt(process.env.PROMPT2MIDI_PORT || '47321', 10);
@@ -14,6 +15,7 @@ function createApp(options = {}) {
   const jobs = options.jobs || createJobStore();
   const analyzer = options.analyzer || runAnalysis;
   const promptGenerator = options.promptGenerator || buildPromptPackage;
+  const sunoGenerator = options.sunoGenerator || generateSunoPrompt;
 
   async function handleAnalyze(req, res) {
     const body = await readJsonBody(req);
@@ -36,7 +38,7 @@ function createApp(options = {}) {
 
     const job = jobs.create({ prompt, audioPath });
     setImmediate(() => {
-      runJob(job.id, { prompt, audioPath }, jobs, analyzer, promptGenerator);
+      runJob(job.id, { prompt, audioPath }, jobs, analyzer, promptGenerator, sunoGenerator);
     });
     return sendJson(res, 202, { job_id: job.id, status: job.status });
   }
@@ -100,7 +102,7 @@ function createApp(options = {}) {
   return createServer(router);
 }
 
-async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
+async function runJob(jobId, input, jobs, analyzer, promptGenerator, sunoGenerator) {
   const log = createJobPipelineLogger(jobId, jobs);
   jobs.update(jobId, { status: 'running', progress: 10, message: 'Preparing local analysis.' });
   log.banner(input);
@@ -123,13 +125,36 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       log.done('01 prompt-only analysis');
     }
 
-    jobs.update(jobId, { progress: 75, message: 'Generating producer prompt.' });
+    jobs.update(jobId, { progress: 75, message: 'Generating SUNO prompt.' });
+
     log.stage('03 prompt package', 'producer summary + AI prompt');
     const interpretation = promptGenerator({
       prompt: input.prompt,
       analysis: analysisPayload.analysis
     });
     log.done('03 prompt package');
+
+    let sunoPrompt = analysisPayload.suno_prompt || null;
+    if (input.audioPath && analysisPayload.composition) {
+      log.stage('03b suno prompt', 'Gemini SUNO prompt from analysis + composition');
+      try {
+        const geminiResult = await sunoGenerator({
+          analysis: analysisPayload.analysis,
+          composition: analysisPayload.composition,
+          exportDir: analysisPayload.export_dir,
+          userPrompt: input.prompt
+        });
+        if (geminiResult) {
+          sunoPrompt = geminiResult;
+          log.done('03b suno prompt', `${geminiResult.text.length} chars`);
+        } else {
+          log.done('03b suno prompt', 'skipped — no key or disabled');
+        }
+      } catch (err) {
+        log.warn(`Gemini SUNO prompt failed: ${err.message || String(err)} — using stub`);
+        log.done('03b suno prompt', 'failed — using stub fallback');
+      }
+    }
 
     log.stage('04 aggregate result', 'store job result for UI polling');
     jobs.update(jobId, {
@@ -139,7 +164,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator) {
       result: {
         analysis: analysisPayload.analysis,
         composition: analysisPayload.composition || null,
-        suno_prompt: analysisPayload.suno_prompt || null,
+        suno_prompt: sunoPrompt,
         export_dir: analysisPayload.export_dir || null,
         interpretation,
         midi_files: analysisPayload.midi_files || {},

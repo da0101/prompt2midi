@@ -9,6 +9,7 @@ const { createApp, promptOnlyAnalysis } = require('../server');
 
 process.env.PROMPT2MIDI_DISABLE_MODEL = '1';
 process.env.PROMPT2MIDI_DISABLE_STEMS = '1';
+process.env.PROMPT2MIDI_DISABLE_SUNO = '1';
 
 describe('prompt2midi local API', () => {
   it('starts a prompt-only job and returns producer prompt output', async () => {
@@ -80,7 +81,7 @@ describe('prompt2midi local API', () => {
     const audioPath = path.join(tempDir, 'pulse.wav');
     writePulseWav(audioPath, 120);
 
-    const server = await listen(createApp());
+    const server = await listen(createApp({ sunoGenerator: async () => null }));
     try {
       const start = await request(server, 'POST', '/analyze', {
         audioPath,
@@ -116,6 +117,43 @@ describe('prompt2midi local API', () => {
       }
       assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text);
       assert.ok(result.body.result.export_dir);
+    } finally {
+      await close(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses sunoGenerator output as suno_prompt when it returns a result', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt2midi-suno-'));
+    const audioPath = path.join(tempDir, 'pulse.wav');
+    writePulseWav(audioPath, 120);
+
+    const mockText = 'Create an original Minimal House track at 120 BPM in C major. Instrumental, no vocals.';
+    const mockSunoGenerator = async () => ({ text: mockText, path: null });
+    const server = await listen(createApp({ sunoGenerator: mockSunoGenerator }));
+    try {
+      const start = await request(server, 'POST', '/analyze', { audioPath, prompt: '' });
+      await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+      const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
+      assert.equal(result.body.result.suno_prompt.text, mockText);
+    } finally {
+      await close(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to Python stub when sunoGenerator returns null', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt2midi-stub-'));
+    const audioPath = path.join(tempDir, 'pulse.wav');
+    writePulseWav(audioPath, 120);
+
+    const server = await listen(createApp({ sunoGenerator: async () => null }));
+    try {
+      const start = await request(server, 'POST', '/analyze', { audioPath, prompt: '' });
+      await waitForStatus(server, start.body.job_id, 'succeeded', 80);
+      const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
+      assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0,
+        'should fall back to Python stub text');
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });
