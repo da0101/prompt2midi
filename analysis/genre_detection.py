@@ -9,12 +9,22 @@ from __future__ import annotations
 import os
 
 _GENRE_LABELS = [
+    # Electronic / dance
     "techno", "house", "deep house", "minimal techno", "tech house", "trance",
     "drum and bass", "dubstep", "ambient", "synth pop", "new wave", "synth wave",
-    "retrowave", "vapor wave", "industrial", "EBM", "hip hop", "trap", "R&B",
-    "jazz", "funk", "soul", "disco", "pop", "rock", "metal", "classical",
-    "country", "reggae", "afrobeat", "latin", "lo-fi hip hop", "chillout",
+    "retrowave", "vapor wave", "industrial", "EBM", "lo-fi hip hop", "chillout",
     "progressive house", "electro", "breakbeat",
+    # Hip-hop / R&B
+    "hip hop", "trap", "R&B", "soul", "funk",
+    # Rock / guitar
+    "rock", "alternative rock", "indie rock", "grunge", "punk rock", "hard rock",
+    "heavy metal", "metal", "classic rock", "pop rock",
+    # Pop / mainstream
+    "pop", "disco", "dance pop",
+    # Jazz / acoustic
+    "jazz", "blues", "classical", "folk", "acoustic",
+    # World
+    "reggae", "afrobeat", "latin", "country",
 ]
 
 _FALLBACK = {

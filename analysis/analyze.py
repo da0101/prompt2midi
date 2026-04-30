@@ -12,17 +12,20 @@ import sys
 from bass_transcription import transcribe_bassline
 from chord_detection import detect_chords
 from composition import generate_inspired_loop
-from drum_analysis import analyze_drums
+from drum_analysis import analyze_drums, drum_pattern_to_midi_events
 from enhanced_analysis import better_bpm, better_key, estimate_groove, infer_genre
 from feature_extraction import AnalysisError, analyze_wav
 from genre_detection import detect_genre
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
+from audio_generation import generate_reference_sample
+from reference_groove import analyze_reference_groove
+from reference_transform import build_reference_transform
 from source_transcription import can_run_model_transcription, transcribe_with_model
 from stem_separation import separate_for_transcription
 from structure_analysis import analyze_structure
 
 
-def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
+def run(audio_path: str, output_dir: str, user_prompt: str = "", similarity_level: str | None = None) -> dict:
     _progress("feature extraction: reading audio and estimating BPM/key/energy")
     analysis = analyze_wav(audio_path)
     os.makedirs(output_dir, exist_ok=True)
@@ -62,6 +65,8 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
     )
     _progress("heuristic bass: tracking low-frequency full-mix fallback")
     bass = transcribe_bassline(audio_path, analysis.get("bpm"))
+    _progress("reference groove: fingerprinting full-track kick and bass movement")
+    analysis["reference_groove"] = analyze_reference_groove(audio_path, analysis.get("bpm"))
     midi_files = {"reference_sketch": sketch_path}
     midi_assets = [
         {
@@ -76,10 +81,43 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
         }
     ]
 
-    stems = separate_for_transcription(audio_path, output_dir) if can_run_model_transcription() else _skipped_stems()
+    stems = separate_for_transcription(audio_path, output_dir) if os.environ.get("PROMPT2MIDI_DISABLE_STEMS") != "1" else _skipped_stems()
+    analysis["stem_separation"] = {
+        "available": stems["available"],
+        "method": stems["method"],
+        "stems": sorted((stems.get("stems") or {}).keys()),
+        "paths": stems.get("stems") or {},
+        "warnings": stems["warnings"],
+    }
     drum_stem = (stems.get("stems") or {}).get("drums")
     _progress("deep analysis: analyzing drum pattern from stem")
     analysis["drums"] = analyze_drums(drum_stem, analysis.get("bpm") or 120.0)
+    drum_events = drum_pattern_to_midi_events(analysis["drums"], analysis.get("bpm") or 120.0)
+    if drum_events:
+        midi_files["source_drum_groove"] = write_note_events_midi(
+            os.path.join(output_dir, "source-drum-groove.mid"),
+            drum_events,
+            bpm=analysis.get("bpm") or 120.0,
+        )
+        midi_assets.append(
+            {
+                "key": "source_drum_groove",
+                "path": midi_files["source_drum_groove"],
+                "label": "Stem-aware drum groove MIDI",
+                "kind": "source_aware_transcription",
+                "is_transcription": True,
+                "source_method": f"{stems.get('method', 'stem_separation')}+onset_detection",
+                "confidence": 0.7,
+                "note_count": len(drum_events),
+                "limitations": [
+                    "Drum MIDI is quantized from separated-drum onset bands and should be edited by ear.",
+                    "Kick, snare, and hat labels are estimated from frequency bands.",
+                ],
+                "source_audio": drum_stem,
+                "source_stem": "drums",
+                "source_stage": "separated_stem",
+            }
+        )
     model = transcribe_with_model(audio_path, output_dir, analysis.get("bpm"), stems)
     for track in model["tracks"]:
         midi_files[track["key"]] = track["path"]
@@ -124,6 +162,10 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
 
     if user_prompt:
         analysis["user_direction"] = user_prompt
+    if similarity_level:
+        analysis["reference_similarity_level"] = similarity_level
+    _progress("reference transform: building groove, bass, and sound-replacement controls")
+    analysis["reference_transform"] = build_reference_transform(user_prompt, analysis)
 
     _progress("composition: generating inspired 32-bar loop")
     exports_dir = os.path.join(output_dir, "exports")
@@ -131,6 +173,14 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
         analysis=analysis,
         output_dir=exports_dir,
         bars=32,
+    )
+    _progress("audio generation: preparing 30-second reference-inspired sample")
+    composition["audio"] = generate_reference_sample(
+        reference_audio=audio_path,
+        output_dir=exports_dir,
+        prompt=user_prompt or (suno_prompt or {}).get("text") or "",
+        analysis=analysis,
+        duration_seconds=30.0,
     )
 
     analysis["bass_transcription"] = {
@@ -144,13 +194,6 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
         "method": model["method"],
         "track_count": len(model["tracks"]),
         "warnings": model["warnings"],
-    }
-    analysis["stem_separation"] = {
-        "available": stems["available"],
-        "method": stems["method"],
-        "stems": sorted((stems.get("stems") or {}).keys()),
-        "paths": stems.get("stems") or {},
-        "warnings": stems["warnings"],
     }
     return {
         "ok": True,
@@ -166,6 +209,7 @@ def run(audio_path: str, output_dir: str, user_prompt: str = "") -> dict:
             "reference-sketch.mid is generated from estimated BPM/key only.",
             "model-transcription.mid is produced by Basic Pitch when the local engine is installed.",
             "source-bass-transcription.mid is produced from a separated bass stem when Demucs and Basic Pitch are installed.",
+            "source-drum-groove.mid is produced from a separated drum stem when Demucs is installed.",
             "model-bass-transcription.mid is pitch-filtered model output, not source-separated bass.",
             "bass-transcription.mid is legacy experimental monophonic low-frequency tracking when present.",
         ],
@@ -177,10 +221,17 @@ def main() -> int:
     parser.add_argument("--audio", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--user-prompt", default="")
+    parser.add_argument(
+        "--similarity-level",
+        choices=["low", "medium-low", "medium", "medium-high", "high", "near-identical", "identical"],
+        help="Named reference regeneration level. 'identical' is treated as near-identical with a twist.",
+    )
     args = parser.parse_args()
 
     try:
-        payload = run(args.audio, args.output_dir, user_prompt=args.user_prompt)
+        level = "near_identical_twist" if args.similarity_level in ("near-identical", "identical") else args.similarity_level
+        level = level.replace("-", "_") if level else level
+        payload = run(args.audio, args.output_dir, user_prompt=args.user_prompt, similarity_level=level)
     except AnalysisError as exc:
         payload = {"ok": False, "error": {"code": exc.code, "message": exc.message}}
     except Exception as exc:  # Defensive boundary for the Node bridge.
@@ -192,12 +243,12 @@ def main() -> int:
 
 
 def _skipped_stems() -> dict:
-    _progress("stem separation: skipped because Basic Pitch is disabled or unavailable")
+    _progress("stem separation: skipped because stems are disabled")
     return {
         "available": False,
         "method": "skipped",
         "stems": {},
-        "warnings": ["Stem separation skipped because model transcription is disabled or Basic Pitch is not installed."],
+        "warnings": ["Stem separation skipped because PROMPT2MIDI_DISABLE_STEMS is enabled."],
     }
 
 
@@ -230,6 +281,8 @@ def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict])
 def _export_name(key: str, has_source_bass: bool) -> str | None:
     if key == "source_bass_transcription":
         return "stem-bass.mid"
+    if key == "source_drum_groove":
+        return "stem-drums.mid"
     if key == "model_transcription":
         return "full-mix-model.mid"
     if key == "model_bass_transcription" and not has_source_bass:

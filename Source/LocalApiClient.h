@@ -142,6 +142,7 @@ inline juce::String summarizeComposition (const juce::var& composition, juce::St
     auto key     = compObject->getProperty ("key").toString();
     auto style   = compObject->getProperty ("style").toString();
     auto midi    = compObject->getProperty ("midi");
+    auto audio   = compObject->getProperty ("audio");
     auto desc    = compObject->getProperty ("description");
 
     juce::String output;
@@ -161,6 +162,52 @@ inline juce::String summarizeComposition (const juce::var& composition, juce::St
             auto filePath = midiObject->getProperty (track).toString();
             if (filePath.isNotEmpty())
                 output << "  " << track << ": " << filePath << "\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* audioObject = audio.getDynamicObject())
+    {
+        auto status = audioObject->getProperty ("status").toString();
+        auto samplePath = audioObject->getProperty ("sample").toString();
+        auto duration = audioObject->getProperty ("duration_seconds").toString();
+        auto provider = audioObject->getProperty ("provider").toString();
+        auto model = audioObject->getProperty ("model").toString();
+        auto reviewStatus = audioObject->getProperty ("review_status").toString();
+        auto manifestPath = audioObject->getProperty ("candidate_manifest").toString();
+        output << "Audio Generation:\n";
+        output << "  status: " << (status.isNotEmpty() ? status : "unknown") << "\n";
+        if (reviewStatus.isNotEmpty())
+            output << "  review: " << reviewStatus << "\n";
+        output << "  provider: " << (provider.isNotEmpty() ? provider : "unknown") << "\n";
+        if (model.isNotEmpty())
+            output << "  model: " << model << "\n";
+        if (manifestPath.isNotEmpty())
+            output << "  candidate manifest: " << manifestPath << "\n";
+        if (auto* candidates = audioObject->getProperty ("candidates").getArray())
+        {
+            if (! candidates->isEmpty())
+            {
+                output << "  candidates:\n";
+                for (int index = 0; index < candidates->size(); ++index)
+                {
+                    if (auto* candidate = candidates->getReference (index).getDynamicObject())
+                    {
+                        auto path = candidate->getProperty ("path").toString();
+                        if (path.isNotEmpty())
+                            output << "    " << (index + 1) << ": " << path << "\n";
+                    }
+                }
+            }
+        }
+        if (samplePath.isNotEmpty())
+        {
+            output << "  sample: " << samplePath << "\n";
+            output << "  duration: " << (duration.isNotEmpty() ? duration : "30") << " seconds\n";
+        }
+        else
+        {
+            output << "  sample: awaiting user candidate choice\n";
         }
         output << "\n";
     }

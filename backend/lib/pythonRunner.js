@@ -6,7 +6,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const analysisScript = path.join(repoRoot, 'analysis', 'analyze.py');
 const outputRoot = path.join(repoRoot, 'tmp', 'jobs');
 
-async function runAnalysis(audioPath, jobId, log = null, userPrompt = '') {
+async function runAnalysis(audioPath, jobId, log = null, userPrompt = '', similarityLevel = '') {
   const outputDir = path.join(outputRoot, jobId);
   if (log) log.stage('02.1 prepare audio', audioPath);
   const prepared = await prepareAudioForAnalysis(audioPath, outputDir);
@@ -17,7 +17,8 @@ async function runAnalysis(audioPath, jobId, log = null, userPrompt = '') {
   return runPythonAnalysis(prepared.analysisPath, outputDir, {
     originalPath: audioPath,
     warnings: prepared.warnings,
-    userPrompt
+    userPrompt,
+    similarityLevel
   }, log);
 }
 
@@ -25,7 +26,8 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
   return new Promise((resolve, reject) => {
     if (log) log.stage('02.2 python engine', 'feature extraction + transcription');
     const userPromptArgs = inputInfo.userPrompt ? ['--user-prompt', inputInfo.userPrompt] : [];
-    const child = spawn('python3', [analysisScript, '--audio', audioPath, '--output-dir', outputDir, ...userPromptArgs], {
+    const similarityArgs = inputInfo.similarityLevel ? ['--similarity-level', inputInfo.similarityLevel] : [];
+    const child = spawn('python3', [analysisScript, '--audio', audioPath, '--output-dir', outputDir, ...userPromptArgs, ...similarityArgs], {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe']
     });

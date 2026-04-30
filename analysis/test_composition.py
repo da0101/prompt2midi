@@ -255,11 +255,11 @@ class GenerateInspiredLoopTest(unittest.TestCase):
         self.assertIn("path", suno)
 
     def test_major_key_generates_major_chords(self):
-        # Imaj7 from C3=48: C=48, E=52 (major third), G=55, B=59
+        # I chord shifted into the mid register: C=60, E=64, G=67.
         events = _chord_events(root=48, mode="major", bpm=120, bars=4)
         notes = {e["midi_note"] for e in events}
-        self.assertIn(52, notes, "major third (E) missing from C major chord")
-        self.assertNotIn(51, notes, "minor third (Eb) should not appear in C major")
+        self.assertIn(64, notes, "major third (E) missing from C major chord")
+        self.assertNotIn(63, notes, "minor third (Eb) should not appear in C major")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ const { generateSunoPrompt } = require('./lib/geminiPromptGenerator');
 const { createPipelineLogger } = require('./lib/devLogger');
 
 const DEFAULT_PORT = Number.parseInt(process.env.PROMPT2MIDI_PORT || '47321', 10);
+const SIMILARITY_LEVELS = new Set(['low', 'medium-low', 'medium', 'medium-high', 'high', 'near-identical', 'identical']);
 
 function createApp(options = {}) {
   const jobs = options.jobs || createJobStore();
@@ -21,6 +22,7 @@ function createApp(options = {}) {
     const body = await readJsonBody(req);
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     const audioPath = typeof body.audioPath === 'string' ? body.audioPath.trim() : '';
+    const similarityLevel = typeof body.similarityLevel === 'string' ? body.similarityLevel.trim().toLowerCase() : '';
 
     if (!prompt && !audioPath) {
       return sendJson(res, 400, {
@@ -30,15 +32,23 @@ function createApp(options = {}) {
         }
       });
     }
+    if (similarityLevel && !SIMILARITY_LEVELS.has(similarityLevel)) {
+      return sendJson(res, 400, {
+        error: {
+          code: 'invalid_similarity_level',
+          message: 'Similarity level must be low, medium-low, medium, medium-high, high, near-identical, or identical.'
+        }
+      });
+    }
 
     if (audioPath) {
       const validationError = await validateAudioPath(audioPath);
       if (validationError) return sendJson(res, 400, { error: validationError });
     }
 
-    const job = jobs.create({ prompt, audioPath });
+    const job = jobs.create({ prompt, audioPath, similarityLevel });
     setImmediate(() => {
-      runJob(job.id, { prompt, audioPath }, jobs, analyzer, promptGenerator, sunoGenerator);
+      runJob(job.id, { prompt, audioPath, similarityLevel }, jobs, analyzer, promptGenerator, sunoGenerator);
     });
     return sendJson(res, 202, { job_id: job.id, status: job.status });
   }
@@ -114,7 +124,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator, sunoGenerat
       log.done('01 validate input');
       jobs.update(jobId, { progress: 35, message: 'Analyzing reference features.' });
       log.stage('02 audio analysis', 'decode, features, MIDI extraction');
-      analysisPayload = await analyzer(input.audioPath, jobId, log, input.prompt);
+      analysisPayload = await analyzer(input.audioPath, jobId, log, input.prompt, input.similarityLevel);
       log.done('02 audio analysis', `${Object.keys(analysisPayload.midi_files || {}).length} MIDI file(s)`);
     } else {
       log.stage('01 prompt-only analysis');

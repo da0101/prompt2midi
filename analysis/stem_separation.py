@@ -37,16 +37,11 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
     stable_root.mkdir(parents=True, exist_ok=True)
 
     timeout = _timeout_seconds()
-    _progress("stem separation: running Demucs htdemucs two-stem bass split")
-    command = [
-        engine,
-        "--two-stems=bass",
-        "-n",
-        "htdemucs",
-        "-o",
-        str(demucs_root),
-        audio_path,
-    ]
+    stem_mode = os.environ.get("PROMPT2MIDI_STEM_MODE") or "full"
+    _progress(f"stem separation: running Demucs htdemucs {stem_mode} split")
+    command = [engine, "-n", "htdemucs", "-o", str(demucs_root), audio_path]
+    if stem_mode == "bass":
+        command.insert(1, "--two-stems=bass")
     env = os.environ.copy()
     cache_root = output_path.parent / "_model-cache"
     env["TMPDIR"] = str(output_path / "demucs-runtime")
@@ -81,8 +76,15 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
             "warnings": ["Stem separation failed: " + _last_error(completed.stderr or completed.stdout)],
         }
 
-    bass_source = _find_stem(demucs_root, "bass.wav")
-    if bass_source is None:
+    stems = {}
+    for name in ("bass", "drums", "other", "vocals"):
+        source = _find_stem(demucs_root, f"{name}.wav")
+        if source is not None:
+            stable = stable_root / f"{name}.wav"
+            shutil.copyfile(source, stable)
+            stems[name] = os.path.abspath(stable)
+
+    if "bass" not in stems:
         _progress("stem separation: Demucs finished but bass.wav is missing")
         return {
             "available": False,
@@ -91,15 +93,13 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
             "warnings": ["Stem separation completed but did not produce bass.wav."],
         }
 
-    stable_bass = stable_root / "bass.wav"
-    shutil.copyfile(bass_source, stable_bass)
-    _progress(f"stem separation: produced 1 stem bass={stable_bass}")
+    _progress(f"stem separation: produced stems {', '.join(sorted(stems))}")
     return {
         "available": True,
         "method": "demucs_htdemucs",
-        "stems": {"bass": os.path.abspath(stable_bass)},
+        "stems": stems,
         "warnings": [
-            "Bass stem is source-separated by Demucs and can still contain kick, guitar, vocal, or synth bleed."
+            "Stems are source-separated by Demucs and can still contain bleed between bass, drums, vocals, and other instruments."
         ],
     }
 

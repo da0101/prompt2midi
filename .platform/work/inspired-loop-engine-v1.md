@@ -9,7 +9,7 @@ repo_ids: [repo-primary]
 base_branch: main
 git_branch: feature/inspired-loop-engine-v1
 created_at: 2026-04-28
-updated_at: 2026-04-28
+updated_at: 2026-04-30
 closure_approved: false
 ---
 
@@ -44,17 +44,33 @@ closure_approved: false
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-04-28 by danilulmashev (auto)
-- **What just happened:** (auto) eae0e55: Add deterministic composition engine and product contract reframe
+- **Last updated:** 2026-04-30 by danilulmashev
+- **What just happened:** Added local traceability for generation runs: candidate manifests, JSONL run registry, feedback recorder CLI, and default all-candidates/await-user-selection ACE behavior instead of automatic final candidate selection.
 - **Current focus:** —
-- **Next action:** (auto-saved from commit — update next action manually)
+- **Next action:** User can give per-level feedback for the Movements candidates; record picks/notes in listen-tests and, for future runs, candidate-manifest feedback records.
 - **Blockers:** none
 
 ## Progress log
 
-2026-04-28 19:49 — (auto) eae0e55: Add deterministic composition engine and product contract reframe
+2026-04-30 08:21 — Added local traceability for generation runs: candidate manifests, JSONL run registry, feedback recorder CLI, and default all-candidates/await-user-selection ACE behavior instead of automatic final candidate selection.
 
-2026-04-28 — Stream registered, plan presented, execution starting
+2026-04-30 08:01 — Added medium-low and medium-high similarity levels, generated both Movements intermediate test runs into project tmp, and recorded accepted feedback for the corrected four-level v2 run.
+
+2026-04-30 07:38 — Generated all four Movements v2 similarity levels into project tmp with corrected ACE mapping.
+
+2026-04-30 07:05 — Recorded user feedback that four similarity levels sounded too similar; fixed ACE level mapping so low uses text2music style conditioning, medium/high/near-identical use separated source strengths, and prompts preserve micro-percussion/vocal-chop roles.
+
+2026-04-30 06:57 — Generated Movements high and near-identical ACE-Step runs with locked groove-led tech house direction; recorded both in listen-tests log.
+
+2026-04-30 06:38 — Generated Movements low-similarity ACE run at /tmp/prompt2midi-movements-low-v1/exports using locked groove-led tech house/minimal-deep-tech/Mood Child style label; auto-selected candidate-3; recorded run in listen log; fixed composition style classifier so explicit tech-house directions are not mislabeled as hip-hop/trap due to words like funky; corrected this run's prompt.txt.
+
+2026-04-30 06:25 — Recorded corrected Movements feedback: medium result worked for house/tech-house lane but should not be treated as a globally accepted bassline solution; researched Manda Moor style classification.
+
+2026-04-30 06:20 — Recorded positive Movements medium feedback, fixed direct CLI MP3 preparation by reusing backend ffmpeg decode, and verified CLI help plus focused tests.
+
+2026-04-30 06:11 — Added ACE candidate override support, fixed prompt contamination for medium/low similarity, generated Movements medium test at /tmp/prompt2midi-movements-medium-v2/exports, and started structured listen-test log.
+
+2026-04-30 00:15 — User identified Smooth Criminal high-v5 candidate 2 as the better high-similarity result; copied it over sample.wav for that run and added a generic CLI/manual candidate override so future runs can promote whichever candidate wins listening review.
 
 ## Open questions
 

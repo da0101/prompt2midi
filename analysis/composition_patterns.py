@@ -8,7 +8,6 @@ _MINOR_PENTATONIC = [0, 3, 5, 7, 10]
 _MAJOR_PENTATONIC = [0, 2, 4, 7, 9]
 _KICK, _SNARE, _CLAP, _HAT_CLOSED, _HAT_OPEN = 36, 38, 39, 42, 46
 _DRUM_CH = 9
-_clamp_bass = lambda n: max(24, min(60, n))
 
 # ── Kick patterns (16th-note positions 0-15 per bar) ──────────────────────────
 _KICK_PATTERNS = {
@@ -27,6 +26,10 @@ _HAT_PATTERNS = {
 }
 _SNARE_ON_2_4 = [4, 12]
 _SNARE_HH_TRAP = [4, 8, 12, 14]
+
+
+def _clamp_bass(note: int) -> int:
+    return max(24, min(55, note))
 
 # ── House/techno bass grooves ─────────────────────────────────────────────────
 # Each entry: list of (16th_pos, dur_16ths, semitone_from_chord_root, vel_adjust)
@@ -116,9 +119,10 @@ def _chord_notes(name: str, key_root_pc: int | None = None, mode: str = "major")
 
 
 def _bass_events(
-    root: int, bpm: float, bars: int, style: str, rng: random.Random,
+    root: int, bpm: float, bars: int, style: str = "house", rng: random.Random | None = None,
     progression: list[str] | None = None,
 ) -> list[dict]:
+    rng = rng or random.Random(0)
     bar_s = 4.0 * 60.0 / bpm
     step = bar_s / 16.0
     s16 = step
@@ -203,7 +207,10 @@ def _bass_events(
     return events
 
 
-def _drum_events(bpm: float, bars: int, style: str, rng: random.Random, detected: dict | None = None) -> list[dict]:
+def _drum_events(
+    bpm: float, bars: int, style: str = "house", rng: random.Random | None = None, detected: dict | None = None
+) -> list[dict]:
+    rng = rng or random.Random(0)
     bar_s = 4.0 * 60.0 / bpm
     s16 = bar_s / 16.0
     events: list[dict] = []
@@ -273,9 +280,10 @@ _MAJOR_PROGRESSIONS = [
 
 
 def _chord_events(
-    root: int, mode: str, bpm: float, bars: int, style: str, rng: random.Random,
+    root: int, mode: str, bpm: float, bars: int, style: str = "house", rng: random.Random | None = None,
     progression: list[str] | None = None,
 ) -> list[dict]:
+    rng = rng or random.Random(0)
     bar_s = 4.0 * 60.0 / bpm
     cfg = _CHORD_VOICINGS.get(style, _CHORD_VOICINGS["house"])
     dur = bar_s * cfg["dur_mult"]
@@ -329,7 +337,10 @@ def _chord_events(
     return events
 
 
-def _melody_events(root: int, mode: str, bpm: float, bars: int, style: str, rng: random.Random) -> list[dict]:
+def _melody_events(
+    root: int, mode: str, bpm: float, bars: int, style: str = "house", rng: random.Random | None = None
+) -> list[dict]:
+    rng = rng or random.Random(0)
     bar_s = 4.0 * 60.0 / bpm
     beat = bar_s / 4.0
     penta = _MINOR_PENTATONIC if mode == "minor" else _MAJOR_PENTATONIC

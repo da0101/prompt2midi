@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import sys
 import time
 
@@ -124,6 +125,9 @@ def _composition_style(analysis: dict) -> str:
     genre_str = (genre_deep.get("primary") or "").lower() if genre_deep.get("confidence", 0) > 0.1 else ""
     combined = f"{user_dir} {genre_str}"
 
+    if _explicit_house_direction(user_dir):
+        return "house"
+
     for style, keywords in _STYLE_KEYWORDS.items():
         if any(kw in combined for kw in keywords):
             return style
@@ -138,6 +142,25 @@ def _composition_style(analysis: dict) -> str:
     if bpm >= 90:
         return "hip_hop"
     return "ambient"
+
+
+def _explicit_house_direction(text: str) -> bool:
+    return bool(
+        any(
+            phrase in text
+            for phrase in (
+                "tech house",
+                "deep house",
+                "minimal deep tech",
+                "minimal / deep tech",
+                "minimal/deep tech",
+                "chicago house",
+                "chicago-influenced house",
+                "mood child",
+            )
+        )
+        or re.search(r"\bhouse\b", text)
+    )
 
 
 def _build_description(
@@ -216,7 +239,7 @@ def _stub_suno_prompt(output_dir: str, composition: dict) -> dict:
         f"Create an original {style} track at {bpm} BPM in {key}. "
         f"{d['drums'].capitalize()}. {d['bass'].capitalize()}. "
         f"{d['chords'].capitalize()}. {d['melody'].capitalize()}. "
-        "Instrumental, no vocals. Inspired by the reference groove and "
+        "Instrumental, no lead vocal; short percussive vocal chops are allowed if they fit the reference style. Inspired by the reference groove and "
         "production style, not a cover and not a copy."
     )
     path = os.path.join(output_dir, "prompt.txt")

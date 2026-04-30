@@ -9,8 +9,13 @@
     "dev:refresh": "bash scripts/dev-refresh.sh",
     "setup:stems": "bash scripts/setup-stem-engine.sh",
     "setup:transcription": "bash scripts/setup-transcription-engine.sh",
+    "setup:ace-step": "bash scripts/setup-ace-step-engine.sh",
+    "ace-step:start": "bash scripts/start-ace-step-api.sh",
+    "reference": "node scripts/run-reference-pipeline.js",
+    "feedback": "node scripts/record-listen-feedback.js",
     "start": "node --env-file=.env backend/server.js",
-    "test": "node --test backend/test/*.test.js"
+    "test": "node --test backend/test/*.test.js",
+    "setup:musicgen": "bash scripts/setup-musicgen-engine.sh"
   },
   "engines": {
     "node": ">=20"

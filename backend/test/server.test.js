@@ -12,6 +12,7 @@ process.env.PROMPT2MIDI_DISABLE_STEMS = '1';
 process.env.PROMPT2MIDI_DISABLE_SUNO = '1';
 process.env.PROMPT2MIDI_DISABLE_LIBROSA = '1';
 process.env.PROMPT2MIDI_DISABLE_GENRE = '1';
+process.env.PROMPT2MIDI_DISABLE_REFERENCE_GROOVE = '1';
 process.env.PROMPT2MIDI_DISABLE_CHORDS = '1';
 process.env.PROMPT2MIDI_DISABLE_STRUCTURE = '1';
 process.env.PROMPT2MIDI_DISABLE_DRUMS = '1';
@@ -49,6 +50,74 @@ describe('prompt2midi local API', () => {
       const response = await request(server, 'POST', '/analyze', {});
       assert.equal(response.statusCode, 400);
       assert.equal(response.body.error.code, 'missing_input');
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rejects unknown similarity levels', async () => {
+    const server = await listen(createApp());
+    try {
+      const response = await request(server, 'POST', '/analyze', {
+        prompt: 'dark club loop',
+        similarityLevel: '70 percent'
+      });
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.body.error.code, 'invalid_similarity_level');
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('passes similarity level to the Python bridge for audio jobs', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt2midi-level-'));
+    const audioPath = path.join(tempDir, 'pulse.wav');
+    writePulseWav(audioPath, 120);
+    let receivedLevel = null;
+
+    const analyzer = async (_audioPath, _jobId, _log, _prompt, similarityLevel) => {
+      receivedLevel = similarityLevel;
+      return {
+        analysis: { bpm: 120, key: 'C minor' },
+        midi_files: {},
+        export_files: {},
+        midi_assets: [],
+        midi_notes: []
+      };
+    };
+    const server = await listen(createApp({ analyzer, sunoGenerator: async () => null }));
+    try {
+      const start = await request(server, 'POST', '/analyze', {
+        audioPath,
+        prompt: 'tight club mix',
+        similarityLevel: 'high'
+      });
+      assert.equal(start.statusCode, 202);
+      await waitForStatus(server, start.body.job_id, 'succeeded', 20);
+      assert.equal(receivedLevel, 'high');
+    } finally {
+      await close(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts intermediate similarity levels', async () => {
+    const server = await listen(createApp({
+      analyzer: async () => ({
+        analysis: { bpm: 120, key: 'C minor' },
+        midi_files: {},
+        export_files: {},
+        midi_assets: [],
+        midi_notes: []
+      }),
+      sunoGenerator: async () => null
+    }));
+    try {
+      const response = await request(server, 'POST', '/analyze', {
+        prompt: 'dark club loop',
+        similarityLevel: 'medium-high'
+      });
+      assert.equal(response.statusCode, 202);
     } finally {
       await close(server);
     }
@@ -120,6 +189,10 @@ describe('prompt2midi local API', () => {
         assert.ok(comp.midi[track], `composition.midi.${track} missing`);
         assert.ok(fs.existsSync(comp.midi[track]), `${track}.mid not on disk`);
       }
+      assert.equal(comp.audio.status, 'disabled');
+      assert.equal(comp.audio.sample, null);
+      assert.equal(comp.audio.duration_seconds, 30);
+      assert.ok(['musicgen_melody', 'audio_generation'].includes(comp.audio.provider));
       assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0);
       assert.ok(result.body.result.export_dir);
     } finally {

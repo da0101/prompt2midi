@@ -65,6 +65,31 @@ def analyze_drums(drum_stem_path: str, bpm: float) -> dict:
         return dict(_FALLBACK)
 
 
+def drum_pattern_to_midi_events(drums: dict, bpm: float, bars: int = 2) -> list[dict]:
+    """Convert a quantized drum fingerprint into editable General MIDI events."""
+    if not drums or drums.get("method") == "unavailable":
+        return []
+    sixteenth = 60.0 / max(40.0, min(220.0, bpm or 120.0)) / 4.0
+    mapping = [("kick", 36, 112), ("snare", 38, 88), ("hat", 42, 72)]
+    events: list[dict] = []
+    for bar in range(max(1, bars)):
+        bar_offset = bar * 16
+        for key, note, velocity in mapping:
+            for position in drums.get(key, []) or []:
+                step = bar_offset + int(position)
+                events.append(
+                    {
+                        "start": round(step * sixteenth, 3),
+                        "duration": round(sixteenth * 0.75, 3),
+                        "midi_note": note,
+                        "velocity": velocity,
+                        "channel": 9,
+                        "confidence": 0.7,
+                    }
+                )
+    return sorted(events, key=lambda event: (event["start"], event["midi_note"]))
+
+
 def _bandpass(y, sr: int, low: float, high: float):
     import numpy as np
     from scipy.signal import butter, sosfilt
