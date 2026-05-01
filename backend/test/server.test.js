@@ -195,6 +195,17 @@ describe('prompt2midi local API', () => {
       assert.ok(['musicgen_melody', 'audio_generation'].includes(comp.audio.provider));
       assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0);
       assert.ok(result.body.result.export_dir);
+      const full = result.body.result.full_arrangement;
+      assert.ok(full, 'full_arrangement key missing from result');
+      assert.equal(full.status, 'ready');
+      assert.ok(full.paths.arrangement_map.endsWith('arrangement-map.json'));
+      assert.ok(full.paths.analysis_report.endsWith('analysis-report.md'));
+      assert.ok(full.paths.suno_structure_prompt.endsWith('suno-structure-prompt.md'));
+      assert.ok(full.paths.full_arrangement_guide_midi.endsWith('full-arrangement-guide.mid'));
+      assert.ok(fs.existsSync(full.paths.arrangement_map));
+      assert.ok(fs.existsSync(full.paths.analysis_report));
+      assert.ok(fs.existsSync(full.paths.suno_structure_prompt));
+      assert.ok(fs.existsSync(full.paths.full_arrangement_guide_midi));
     } finally {
       await close(server);
       fs.rmSync(tempDir, { recursive: true, force: true });

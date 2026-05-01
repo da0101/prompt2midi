@@ -75,7 +75,7 @@ def generate_reference_sample(
 
     sample_rate = int(getattr(processor.feature_extractor, "sampling_rate", 32000) or 32000)
     reference = _decode_reference(reference_audio, sample_rate, DEFAULT_REFERENCE_SECONDS)
-    text = _minimal_house_prompt(prompt)
+    text = _style_prompt(prompt)
 
     _progress("musicgen: conditioning on reference audio + prompt")
     inputs = processor(
@@ -206,14 +206,14 @@ def _fit_duration(audio, sample_rate: int, duration_seconds: float):
     return audio
 
 
-def _minimal_house_prompt(prompt: str) -> str:
+def _style_prompt(prompt: str) -> str:
     base = prompt.strip()
     if not base:
-        base = "underground minimal house"
+        base = "reference-inspired instrumental music"
     return (
-        f"{base}. Generate an underground minimal house instrumental section, deep club groove, "
-        "tight dry kick, rolling sub bass, sparse syncopated percussion, subtle shuffled hats, "
-        "dark hypnotic chord stabs, restrained arrangement, warm analog texture, no vocals, "
+        f"{base}. Generate a producer-grade original instrumental guide track with the same tempo and key area "
+        "as the reference, clear drums, defined bassline, stable tonal harmony, recognizable hook role, clean mix, "
+        "no copied lyrics, no copied singer identity, no warped vocals, no random glitches, no atonal artifacts, "
         "not a cover and not a copy of the reference."
     )
 

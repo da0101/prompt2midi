@@ -9,7 +9,7 @@ repo_ids: [repo-primary]
 base_branch: main
 git_branch: feature/inspired-loop-engine-v1
 created_at: 2026-04-28
-updated_at: 2026-04-30
+updated_at: 2026-05-01
 closure_approved: false
 ---
 
@@ -44,33 +44,33 @@ closure_approved: false
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-04-30 by danilulmashev
-- **What just happened:** Added local traceability for generation runs: candidate manifests, JSONL run registry, feedback recorder CLI, and default all-candidates/await-user-selection ACE behavior instead of automatic final candidate selection.
+- **Last updated:** 2026-05-01 by danilulmashev
+- **What just happened:** Tightened Suno proxy lane for copyright-safe MJ-style testing: added reference section controls to proxy/reference runners, made proxy runner default to early-character selection, fixed audio_generation so env/CLI section strategy is honored, generated v5 from MJ-testing.m4a with explicit 8s section and forced vocal-hook ACE mode, packaged candidate 4 for Suno.
 - **Current focus:** —
-- **Next action:** User can give per-level feedback for the Movements candidates; record picks/notes in listen-tests and, for future runs, candidate-manifest feedback records.
+- **Next action:** User should audition tmp/mj-inspired-proxy-v5-start8-vocal-hook candidates and Suno package; if vocal-hook ACE output is unstable, keep ACE for groove/instrumental proxies and route vocal-rich pop/funk references to a different generator or section-by-section proxy strategy.
 - **Blockers:** none
 
 ## Progress log
 
-2026-04-30 08:21 — Added local traceability for generation runs: candidate manifests, JSONL run registry, feedback recorder CLI, and default all-candidates/await-user-selection ACE behavior instead of automatic final candidate selection.
+2026-05-01 14:42 — Tightened Suno proxy lane for copyright-safe MJ-style testing: added reference section controls to proxy/reference runners, made proxy runner default to early-character selection, fixed audio_generation so env/CLI section strategy is honored, generated v5 from MJ-testing.m4a with explicit 8s section and forced vocal-hook ACE mode, packaged candidate 4 for Suno.
 
-2026-04-30 08:01 — Added medium-low and medium-high similarity levels, generated both Movements intermediate test runs into project tmp, and recorded accepted feedback for the corrected four-level v2 run.
+2026-05-01 13:33 — Adjusted copyright-safe Suno proxy boundary from user feedback: Suno prompt is now compact under 1000 chars and asks Suno to preserve/polish the generated proxy, not invent missing layers. Updated proxy-run ACE default prompt to request a complete full-arrangement proxy with drums, bass, percussion, synth stabs, layered keys, comping, hits, transitions, and optional stable original vocal phrases; no longer forces instrumental unless --instrumental is passed.
 
-2026-04-30 07:38 — Generated all four Movements v2 similarity levels into project tmp with corrected ACE mapping.
+2026-05-01 13:22 — Corrected Suno workflow around copyright-safe proxy demos: added suno_proxy_package.py, npm run suno:proxy, npm run suno:proxy-run. The new lane analyzes the source reference locally, generates ACE proxy candidates, refuses to package the original reference as proxy audio, and writes Suno upload artifacts only from generated proxy audio. Ran MJ-testing.m4a proxy test; generated 4 ACE candidates and packaged candidate 3 under tmp/mj-inspired-proxy-v1/suno-proxy-package.
 
-2026-04-30 07:05 — Recorded user feedback that four similarity levels sounded too similar; fixed ACE level mapping so low uses text2music style conditioning, medium/high/near-identical use separated source strengths, and prompts preserve micro-percussion/vocal-chop roles.
+2026-05-01 12:52 — Added fast Suno Cover prep lane: local reference analysis, best 30s audio seed extraction, Suno prompt/report/instructions/manifest output, npm run suno:prepare wrapper, and focused unit test. Verified on MJ-testing.m4a into tmp/suno-mj-testing-v3.
 
-2026-04-30 06:57 — Generated Movements high and near-identical ACE-Step runs with locked groove-led tech house direction; recorded both in listen-tests log.
+2026-05-01 10:05 — Disabled automatic ACE control-scaffold routing after listening feedback showed scaffold-conditioned ACE output was unusable; scaffold remains explicit-only behind --control-scaffold while normal bass-lock prompts return to real-reference ACE conditioning.
 
-2026-04-30 06:38 — Generated Movements low-similarity ACE run at /tmp/prompt2midi-movements-low-v1/exports using locked groove-led tech house/minimal-deep-tech/Mood Child style label; auto-selected candidate-3; recorded run in listen log; fixed composition style classifier so explicit tech-house directions are not mislabeled as hip-hop/trap due to words like funky; corrected this run's prompt.txt.
+2026-05-01 09:40 — Added ACE control-scaffold conditioning path: pipeline renders an in-key bass/drum scaffold from analysis/groove and can route bass-lock prompts through it before ACE; generated Tiga 15s validation run at tmp/tiga-control-scaffold-v1-15s.
 
-2026-04-30 06:25 — Recorded corrected Movements feedback: medium result worked for house/tech-house lane but should not be treated as a globally accepted bassline solution; researched Manda Moor style classification.
+2026-05-01 09:18 — Added safe FFT reference groove extraction for fast ACE lane, concrete bass/kick/hat grid prompting, chord-root key correction for ACE payloads, and generated Tiga bass-lock v3 grid/key validation candidates.
 
-2026-04-30 06:20 — Recorded positive Movements medium feedback, fixed direct CLI MP3 preparation by reusing backend ffmpeg decode, and verified CLI help plus focused tests.
+2026-05-01 08:54 — Added bass rhythm/sound lock intent for ACE: detects same bass rhythm/sound with different notes, strengthens source conditioning, preserves bass tone/rhythm, moves bass-lock guard to front of ACE prompt, expands anti-glitch bass negatives, and generated Tiga bass-lock v1/v2 validation batches.
 
-2026-04-30 06:11 — Added ACE candidate override support, fixed prompt contamination for medium/low similarity, generated Movements medium test at /tmp/prompt2midi-movements-medium-v2/exports, and started structured listen-test log.
+2026-05-01 08:20 — Added ACE preflight suitability/router with hidden controls, prompt-directed similarity, very-high profile, early ace-preflight export, effective similarity metadata, vocal-aware ACE payloads, and generated a Tiga prompt-directed validation batch.
 
-2026-04-30 00:15 — User identified Smooth Criminal high-v5 candidate 2 as the better high-similarity result; copied it over sample.wav for that run and added a generic CLI/manual candidate override so future runs can promote whichever candidate wins listening review.
+2026-04-30 23:30 — Generated Tiga near-identical vocal fast ACE run, 30s, 4 candidates at tmp/tiga-fast-near-identical-vocal-v1-30s/exports; candidate 3 suggested though all candidates have timbre/noisy warnings
 
 ## Open questions
 

@@ -70,10 +70,27 @@ The result also includes `midi_assets`, a structured list with `kind`, `source_m
 Product-facing MIDI is copied into `tmp/jobs/<job_id>/exports/` and marked with `is_recommended_output: true`.
 Use that folder when auditioning or giving feedback. Other files in the job folder are retained as debug/intermediate artifacts.
 
+Full-song SUNO control artifacts are also written into `tmp/jobs/<job_id>/exports/` for every audio run:
+
+- `arrangement-map.json` — bar-aligned section map with energy, active roles, and similarity policy.
+- `analysis-report.md` — producer-readable analysis report with confidence limits.
+- `suno-structure-prompt.md` — section-by-section prompt intended to be used with the ACE guide audio in SUNO.
+- `full-arrangement-guide.mid` — full-song MIDI scaffold following the detected section lengths and energy curve.
+
+The current slice does not yet render `full-arrangement-guide.wav`; that remains the next ACE-Step stage after the scaffold/report contract is stable.
+When explicitly enabled, the full guide renderer uses ACE-Step section by section and stitches the generated sections into `full-arrangement-guide.wav`.
+ACE candidate audio defaults to 4 normal 30-second candidates per similarity level. Set `PROMPT2MIDI_REFERENCE_SAMPLE_DURATION=full` or pass `--duration full` through `npm run reference` when the candidate audio should match the full reference length.
+
 Optional engines are capability-gated:
 
+- `PROMPT2MIDI_DISABLE_ALLIN1=1` disables the optional All-In-One structure analyzer.
+- `PROMPT2MIDI_ALLIN1=/path/to/allin1` overrides All-In-One discovery.
+- `PROMPT2MIDI_DISABLE_ESSENTIA=1` disables the optional Essentia MusicExtractor adapter.
+- `PROMPT2MIDI_ESSENTIA_EXTRACTOR=/path/to/essentia_streaming_extractor_music` overrides Essentia discovery.
 - `PROMPT2MIDI_DISABLE_MODEL=1` disables Basic Pitch.
 - `PROMPT2MIDI_BASIC_PITCH=/path/to/basic-pitch` overrides Basic Pitch discovery.
 - `PROMPT2MIDI_DISABLE_STEMS=1` disables Demucs.
 - `PROMPT2MIDI_DEMUCS=/path/to/demucs` overrides Demucs discovery.
 - `PROMPT2MIDI_STEM_TIMEOUT_SECONDS=360` controls Demucs timeout.
+- `PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE=1` enables section-by-section full guide audio rendering.
+- `PROMPT2MIDI_FULL_GUIDE_MAX_SECTIONS=12` limits accidental long ACE guide renders.

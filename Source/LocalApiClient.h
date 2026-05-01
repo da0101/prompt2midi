@@ -240,6 +240,59 @@ inline juce::String summarizeComposition (const juce::var& composition, juce::St
     return output;
 }
 
+inline juce::String summarizeFullArrangement (const juce::var& fullArrangement)
+{
+    auto* fullObject = fullArrangement.getDynamicObject();
+    if (fullObject == nullptr)
+        return {};
+
+    auto status = fullObject->getProperty ("status").toString();
+    if (status.isEmpty())
+        return {};
+
+    auto sections = fullObject->getProperty ("section_count").toString();
+    auto bars = fullObject->getProperty ("total_bars").toString();
+    auto level = fullObject->getProperty ("similarity_level").toString();
+    auto paths = fullObject->getProperty ("paths");
+
+    juce::String output;
+    output << "Full Song SUNO Control Package\n";
+    output << "Status: " << status << "\n";
+    if (level.isNotEmpty())
+        output << "Similarity: " << level << "\n";
+    if (bars.isNotEmpty())
+        output << "Bars: " << bars << "\n";
+    if (sections.isNotEmpty())
+        output << "Sections: " << sections << "\n";
+
+    if (auto* pathsObject = paths.getDynamicObject())
+    {
+        output << "Files:\n";
+        for (const juce::String& key : { juce::String ("arrangement_map"),
+                                         juce::String ("analysis_report"),
+                                         juce::String ("suno_structure_prompt"),
+                                         juce::String ("full_arrangement_guide_midi") })
+        {
+            auto filePath = pathsObject->getProperty (key).toString();
+            if (filePath.isNotEmpty())
+                output << "  " << key << ": " << filePath << "\n";
+        }
+    }
+
+    if (auto* guideAudio = fullObject->getProperty ("guide_audio").getDynamicObject())
+    {
+        auto audioStatus = guideAudio->getProperty ("status").toString();
+        auto reason = guideAudio->getProperty ("reason").toString();
+        if (audioStatus.isNotEmpty())
+            output << "Guide audio: " << audioStatus << "\n";
+        if (reason.isNotEmpty())
+            output << "  " << reason << "\n";
+    }
+
+    output << "\n";
+    return output;
+}
+
 inline juce::String summarizeResult (const juce::var& root, juce::String& promptForClipboard)
 {
     auto* rootObject = root.getDynamicObject();
@@ -253,6 +306,7 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
 
     auto analysis     = resultObject->getProperty ("analysis");
     auto composition  = resultObject->getProperty ("composition");
+    auto fullArrangement = resultObject->getProperty ("full_arrangement");
     auto sunoPrompt   = resultObject->getProperty ("suno_prompt");
     auto interpretation = resultObject->getProperty ("interpretation");
     auto midiNotes    = resultObject->getProperty ("midi_notes");
@@ -328,6 +382,7 @@ inline juce::String summarizeResult (const juce::var& root, juce::String& prompt
     if (compBlock.isNotEmpty())
     {
         output << compBlock;
+        output << summarizeFullArrangement (fullArrangement);
     }
     else
     {

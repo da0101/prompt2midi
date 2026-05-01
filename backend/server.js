@@ -174,6 +174,7 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator, sunoGenerat
       result: {
         analysis: analysisPayload.analysis,
         composition: analysisPayload.composition || null,
+        full_arrangement: analysisPayload.full_arrangement || null,
         suno_prompt: sunoPrompt,
         export_dir: analysisPayload.export_dir || null,
         interpretation,

@@ -99,6 +99,7 @@ def _candidate_record(index: int, candidate: dict) -> dict:
             "rms": quality.get("rms"),
             "peak": quality.get("peak"),
             "zero_crossing_rate": quality.get("zero_crossing_rate"),
+            "level_gate": quality.get("level_gate"),
             "warnings": quality.get("warnings") or [],
         },
     }

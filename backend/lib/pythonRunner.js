@@ -83,6 +83,13 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
             log.info(`composition output ${track}: ${filePath}`);
           }
         }
+        const full = payload.full_arrangement || {};
+        if (full.status) {
+          log.info(`full arrangement: sections=${full.section_count || 0} bars=${full.total_bars || 'unknown'} level=${full.similarity_level || 'medium'}`);
+          for (const [label, filePath] of Object.entries(full.paths || {})) {
+            if (filePath) log.info(`full arrangement output ${label}: ${filePath}`);
+          }
+        }
         for (const asset of (payload.midi_assets || []).filter((item) => item.is_recommended_output)) {
           log.info(`recommended output ${asset.label || asset.key}: ${asset.path}${asset.note_count ? ` (${asset.note_count} notes)` : ''}`);
         }
@@ -98,6 +105,7 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
       resolve({
         analysis,
         composition: payload.composition || null,
+        full_arrangement: payload.full_arrangement || null,
         suno_prompt: payload.suno_prompt || null,
         export_dir: payload.export_dir || null,
         midi_files: payload.midi_files || {},

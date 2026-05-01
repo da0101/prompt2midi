@@ -38,7 +38,13 @@ def generate_reference_sample(
         }
 
     attempts: list[dict] = []
-    section = prepare_reference_section(reference_audio, output_dir, duration_seconds=duration_seconds)
+    transform = (analysis or {}).get("reference_transform") or {}
+    section = prepare_reference_section(
+        reference_audio,
+        output_dir,
+        duration_seconds=duration_seconds,
+        strategy=_reference_section_strategy(transform),
+    )
     reference_groove = analyze_reference_groove(
         reference_audio,
         (analysis or {}).get("bpm"),
@@ -47,9 +53,28 @@ def generate_reference_sample(
     analysis_with_groove = dict(analysis or {})
     analysis_with_groove["reference_groove"] = reference_groove
     conditioned_prompt = _condition_prompt(prompt, reference_groove, analysis_with_groove.get("reference_transform"))
+    ace_reference_audio = section["path"]
+    control_scaffold = None
+    if _should_use_control_scaffold(transform, prompt):
+        try:
+            from structured_render import render_control_scaffold
+
+            control_scaffold = render_control_scaffold(
+                reference_path=section["path"],
+                output_dir=output_dir,
+                prompt=prompt,
+                analysis=analysis_with_groove,
+                reference_groove=reference_groove,
+                duration_seconds=duration_seconds,
+            )
+            ace_reference_audio = control_scaffold["path"]
+            analysis_with_groove["control_scaffold"] = control_scaffold
+            conditioned_prompt = _control_scaffold_direction() + " " + conditioned_prompt
+        except Exception as exc:
+            attempts.append({"provider": "control_scaffold", "status": "failed", "message": str(exc)})
 
     ace = generate_with_ace_step(
-        reference_audio=section["path"],
+        reference_audio=ace_reference_audio,
         output_dir=output_dir,
         prompt=conditioned_prompt,
         analysis=analysis_with_groove,
@@ -59,6 +84,8 @@ def generate_reference_sample(
     if ace.get("status") == "succeeded":
         ace["reference_section"] = section
         ace["reference_groove"] = reference_groove
+        if control_scaffold:
+            ace["control_scaffold"] = control_scaffold
         ace["attempts"] = attempts
         return ace
 
@@ -128,27 +155,79 @@ def _has_enabled_provider() -> bool:
     )
 
 
+def _reference_section_strategy(reference_transform: dict) -> str:
+    configured = os.environ.get("PROMPT2MIDI_REFERENCE_SECTION_STRATEGY")
+    if configured:
+        return configured
+    rich_reference = (reference_transform or {}).get("rich_reference") or {}
+    vocal = (reference_transform or {}).get("vocals") or {}
+    if rich_reference.get("enabled") or vocal.get("preserve_role"):
+        return "early_character"
+    return "stable_energy"
+
+
+def _should_use_control_scaffold(reference_transform: dict, prompt: str) -> bool:
+    if os.environ.get("PROMPT2MIDI_DISABLE_CONTROL_SCAFFOLD") == "1":
+        return False
+    if os.environ.get("PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD") == "1":
+        return True
+    return False
+
+
+def _control_scaffold_direction() -> str:
+    return (
+        "Use the attached generated control scaffold as the hard rhythm and bass reference: "
+        "preserve its bass rhythm, bass note lengths, rests, steady bass envelope, kick pocket, and key area; "
+        "you may replace the exact synth texture with professional production, but do not turn the bass into glitches, chops, jumps, breaks, or off-scale notes."
+    )
+
+
 def _condition_prompt(prompt: str, reference_groove: dict, reference_transform: dict | None = None) -> str:
     parts = []
-    base = _model_prompt_for_transform(prompt, reference_transform or {})
-    if base:
-        parts.append(base)
+    bass_lock = _bass_lock_direction(reference_transform or {})
+    if bass_lock:
+        parts.append(bass_lock)
     groove_prompt = _groove_prompt_for_transform(reference_groove or {}, reference_transform or {})
     if groove_prompt:
         parts.append(groove_prompt)
+    base = _model_prompt_for_transform(prompt, reference_transform or {})
+    if base:
+        parts.append(base)
+    harmonic = _harmonic_transform(reference_transform or {})
+    harmonic_prompt = _harmonic_direction(harmonic).strip()
+    if harmonic_prompt:
+        parts.append(harmonic_prompt)
+    character_prompt = _reference_character_prompt(reference_transform or {})
+    if character_prompt:
+        parts.append(character_prompt)
     transform_prompt = _compact_transform_prompt(reference_transform or {})
     if transform_prompt:
         parts.append(transform_prompt)
     style_brief = (reference_transform or {}).get("style_brief") or "the detected reference style"
     style_target = "the requested style direction and reference groove pocket" if (prompt or "").strip() else style_brief
+    vocal = _vocal_transform(reference_transform or {})
+    direct_vocal = _uses_direct_vocal(vocal)
+    track_kind = "track" if direct_vocal else "instrumental guide track"
+    vocal_direction = ""
+    if direct_vocal:
+        vocal_direction = (
+        f"include a clear new {vocal.get('role', 'vocal hook')} with original words, new voice, and new melody contour; "
+        "do not copy the reference singer, lyrics, or exact hook; "
+        )
+    elif vocal.get("preserve_role"):
+        vocal_direction = (
+            f"translate the reference {vocal.get('role', 'vocal hook')} role into a clean synth, keyboard, or short non-lyrical vocal-chop hook; "
+            "avoid lead singing, warped formants, stretched chops, and squeezed transition artifacts; "
+        )
     parts.append(
-        f"make a producer-grade original instrumental in {style_target}; "
+        f"make a producer-grade original {track_kind} in {style_target}; "
+        f"{vocal_direction}"
         "keep the reference energy, timing pocket, rhythmic confidence, and mix clarity; "
         "use conventional professional drums, bass, stabs, guitars, keys, and synths for the detected style; "
         "avoid random glitches, alien sci-fi sounds, cartoon timbres, atonal artifacts, weak drums, thin bass, "
         "copied lead hooks, and copied vocal identity"
     )
-    return _sentence_limited(". ".join(parts), 1100)
+    return _sentence_limited(". ".join(parts), 900)
 
 
 def _compact_transform_prompt(reference_transform: dict) -> str:
@@ -178,7 +257,23 @@ def _compact_transform_prompt(reference_transform: dict) -> str:
             "new generated performance with different samples",
         ]
     if bass.get("vary_notes"):
-        controls.append("keep bass rhythm but change notes")
+        if bass.get("preserve_sound_design"):
+            controls.append("keep bass rhythm and steady bass sound; change only pitch notes")
+            controls.append("no glitchy, choppy, stuttered, or jumpy bass behavior")
+        else:
+            controls.append("keep bass rhythm but change notes")
+    harmonic = _harmonic_transform(reference_transform)
+    if harmonic.get("strict_scale"):
+        controls.append(f"scale-aware inside {harmonic.get('key')} with no clashing off-scale notes")
+    vocal = _vocal_transform(reference_transform)
+    if vocal.get("preserve_role"):
+        if _uses_direct_vocal(vocal):
+            controls.append(f"new {vocal.get('role', 'vocal hook')} role, not copied")
+        else:
+            controls.append(f"clean instrumental proxy for the {vocal.get('role', 'vocal hook')} role")
+    rich_reference = (reference_transform or {}).get("rich_reference") or {}
+    if rich_reference.get("enabled"):
+        controls.append("simplify dense hooks and transitions into stable intentional parts")
     return "control brief: " + "; ".join(controls)
 
 
@@ -192,33 +287,102 @@ def _model_prompt_for_transform(prompt: str, reference_transform: dict) -> str:
 
     if not reference_transform or similarity >= 0.75:
         return base
+    vocal = _vocal_transform(reference_transform)
+    if _uses_direct_vocal(vocal):
+        vocal_context = (
+        f"preserve the reference's {vocal.get('role', 'vocal hook')} function with original words, new voice, and changed melody contour; "
+        )
+    elif vocal.get("preserve_role"):
+        vocal_context = (
+            f"preserve the reference's {vocal.get('role', 'vocal hook')} function as a clean synth/keyboard/non-lyrical chop hook; "
+            "do not attempt lead vocal resynthesis; "
+        )
+    else:
+        vocal_context = ""
     if base:
         style_context = "" if _has_explicit_style_direction(base) else f"detected reference style: {style_brief}; "
+        bass_context = _bass_lock_direction(reference_transform)
         if similarity < 0.4:
             return (
                 f"{base}; {style_context}use the reference as a producer brief for tempo, key area, groove attitude, mood, "
-                "and broad arrangement roles; change the bassline notes, percussion accents, and sound palette clearly"
+                f"and broad arrangement roles; {vocal_context}{bass_context}"
+                "change the bassline notes, percussion accents, and sound palette clearly"
             )
         return (
             f"{base}; {style_context}keep the same tempo, key area, groove pocket, and mood from the reference; "
+            f"{vocal_context}{bass_context}"
             "make the bass notes and secondary percussion noticeably different"
         )
     if similarity < 0.4:
         return (
-            f"create a new original instrumental using the reference as a producer brief: {style_brief}; "
+            f"create a new original track using the reference as a producer brief: {style_brief}; "
             "keep the same tempo, key area, groove attitude, mood, and broad arrangement roles; "
+            f"{vocal_context}"
             "change the bassline notes, percussion accents, and sound palette clearly while staying musical and tonal"
         )
     return (
-        f"create a reference-inspired original instrumental using this detected style: {style_brief}; "
-        "keep the same tempo, key area, groove pocket, and mood; make the bass notes and secondary percussion noticeably different"
+        f"create a reference-inspired original track using this detected style: {style_brief}; "
+        f"keep the same tempo, key area, groove pocket, and mood; {vocal_context}"
+        "make the bass notes and secondary percussion noticeably different"
     )
+
+
+def _vocal_transform(reference_transform: dict) -> dict:
+    vocal = (reference_transform or {}).get("vocals") or {}
+    if vocal.get("preserve_role"):
+        return vocal
+    return {}
+
+
+def _bass_lock_direction(reference_transform: dict) -> str:
+    bass = (reference_transform or {}).get("bass") or {}
+    if not bass.get("preserve_sound_design"):
+        return ""
+    return (
+        "bass lock: same bassline rhythm, same note lengths, same rests, same steady bass tone and envelope, "
+        "different bass pitch notes only; avoid glitchy bass, choppy bass, stutter bass, jumpy edits, and broken breakbeat bass behavior; "
+    )
+
+
+def _uses_direct_vocal(vocal: dict) -> bool:
+    return bool(vocal.get("preserve_role")) and vocal.get("render_mode") != "instrumental_hook_proxy"
+
+
+def _harmonic_transform(reference_transform: dict) -> dict:
+    harmonic = (reference_transform or {}).get("harmonic") or {}
+    return harmonic if isinstance(harmonic, dict) else {}
+
+
+def _harmonic_direction(harmonic: dict) -> str:
+    key = harmonic.get("key")
+    if harmonic.get("strict_scale") and key:
+        return (
+            f"keep bassline, vocal hook, synth melody, and stabs scale-aware inside {key}; "
+            "allow only resolved chromatic or borrowed tones supported by the reference; avoid clashing off-scale notes; "
+        )
+    return "keep all melodic and harmonic material tonal, resolved, and scale-aware; "
+
+
+def _reference_character_prompt(reference_transform: dict) -> str:
+    character = (reference_transform or {}).get("reference_character") or {}
+    prompt = str(character.get("prompt") or "").strip()
+    if not prompt:
+        return ""
+    return f"{prompt}; preserve this mood and energy while changing the composition details"
 
 
 def _sanitize_user_prompt_for_model(prompt: str) -> str:
     text = " ".join((prompt or "").replace("\n", " ").split())
     if not text:
         return ""
+    text = re.sub(
+        r"\bbetween\s+(?:low|medium[-\s]?low|medium|medium[-\s]?high|high|very[-\s]?high|near[-\s]?identical|identical)"
+        r"(?:\s+similarity)?\s+and\s+(?:low|medium[-\s]?low|medium|medium[-\s]?high|high|very[-\s]?high|near[-\s]?identical|identical)"
+        r"(?:\s+similarity)?\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     text = re.sub(
         r"\b([1-9][0-9]?|100)\s*%?\s*(identical|same|similar|close|similarity)\b",
         "",
@@ -232,7 +396,11 @@ def _sanitize_user_prompt_for_model(prompt: str) -> str:
         flags=re.IGNORECASE,
     )
     text = re.sub(
-        r"\b(low|medium[-\s]?low|medium|medium[-\s]?high|high)\s+similarity\b|\bsimilarity\s+(low|medium[-\s]?low|medium|medium[-\s]?high|high)\b|\b(near[-\s]?identical|identical)\s+(?:similarity\s+)?(?:with\s+)?twist\b|\bidentical\s+similarity\b",
+        r"\b(low|medium[-\s]?low|medium|medium[-\s]?high|high|very[-\s]?high)\s+similarity\b|"
+        r"\bsimilarity\s+(low|medium[-\s]?low|medium|medium[-\s]?high|high|very[-\s]?high)\b|"
+        r"\b(near[-\s]?identical|identical)\s+(?:similarity\s+)?(?:with\s+)?twist\b|"
+        r"\b(?:near[-\s]?identical|identical)\s+similarity\b|"
+        r"\bnear[-\s]?identical\b",
         "",
         text,
         flags=re.IGNORECASE,
@@ -244,6 +412,7 @@ def _sanitize_user_prompt_for_model(prompt: str) -> str:
         flags=re.IGNORECASE,
     )
     text = re.sub(r"\s+([,;.])", r"\1", text)
+    text = re.sub(r"\bsomething,\s+(?=very close|close|same|new|different)", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s*([,;.])\s*:\s*", r"\1 ", text)
     text = re.sub(r"^[,;:.\s]+", "", text)
     text = re.sub(r"^(with|and)\b\s*[,;.]?\s*", "", text, flags=re.IGNORECASE)
@@ -291,6 +460,9 @@ def _groove_prompt_for_transform(reference_groove: dict, reference_transform: di
     parts = [
         grid_intro,
     ]
+    bass_lock = _bass_lock_direction(reference_transform)
+    if bass_lock:
+        parts.append(bass_lock.rstrip(" ;"))
     for key, label in (
         ("kick_pattern_16th", "kick accents"),
         ("bass_accent_pattern_16th", "bass rhythm accents"),

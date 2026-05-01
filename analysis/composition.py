@@ -88,6 +88,7 @@ def generate_inspired_loop(
         "style":       style_label,
         "midi":        paths,
         "description": description,
+        "vocal_role":  _composition_vocal_role(analysis),
     }
     _write_summary(output_dir, composition)
     suno = _stub_suno_prompt(output_dir, composition)
@@ -235,14 +236,30 @@ def _stub_suno_prompt(output_dir: str, composition: dict) -> dict:
     """Write a human-readable SUNO prompt stub."""
     style, bpm, key = composition["style"], composition["bpm"], composition["key"]
     d = composition["description"]
+    vocal_role = composition.get("vocal_role") or {}
+    vocal_line = (
+        f"Include a new {vocal_role.get('role', 'vocal hook')} with original words, new voice, and changed melody contour; do not copy the reference singer, lyrics, or exact hook. "
+        if vocal_role.get("present")
+        else "Instrumental, no lead vocal; short percussive vocal chops are allowed if they fit the reference style. "
+    )
     text = (
         f"Create an original {style} track at {bpm} BPM in {key}. "
         f"{d['drums'].capitalize()}. {d['bass'].capitalize()}. "
         f"{d['chords'].capitalize()}. {d['melody'].capitalize()}. "
-        "Instrumental, no lead vocal; short percussive vocal chops are allowed if they fit the reference style. Inspired by the reference groove and "
+        f"{vocal_line}Inspired by the reference groove and "
         "production style, not a cover and not a copy."
     )
     path = os.path.join(output_dir, "prompt.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     return {"text": text, "path": os.path.abspath(path)}
+
+
+def _composition_vocal_role(analysis: dict) -> dict:
+    transform_vocal = ((analysis.get("reference_transform") or {}).get("vocals") or {})
+    if transform_vocal.get("preserve_role"):
+        return {"present": True, "role": transform_vocal.get("role") or "vocal hook"}
+    vocals = analysis.get("vocals") or {}
+    if vocals.get("present"):
+        return {"present": True, "role": vocals.get("role") or "vocal hook"}
+    return {"present": False, "role": "none"}

@@ -28,7 +28,7 @@ def analyze_structure(audio_path: str, bpm: float) -> dict:
         from scipy.cluster.hierarchy import fcluster, linkage
         from scipy.spatial.distance import pdist
 
-        y, sr = librosa.load(audio_path, sr=22050, mono=True, duration=180.0)
+        y, sr = librosa.load(audio_path, sr=22050, mono=True)
         duration = librosa.get_duration(y=y, sr=sr)
 
         hop = 512

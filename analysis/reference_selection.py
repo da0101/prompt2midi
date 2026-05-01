@@ -11,13 +11,23 @@ from pathlib import Path
 from feature_extraction import AnalysisError, read_wav_mono
 
 
-def prepare_reference_section(audio_path: str, output_dir: str, duration_seconds: float = 30.0) -> dict:
+def prepare_reference_section(
+    audio_path: str,
+    output_dir: str,
+    duration_seconds: float = 30.0,
+    strategy: str | None = None,
+) -> dict:
     """Export a representative groove section and return metadata about the choice."""
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     audio = _read_audio_for_selection(audio_path, output_dir)
     requested = max(10.0, float(duration_seconds))
     section_duration = min(requested, max(1.0, audio.duration_seconds))
-    start = _choose_start(audio.samples, audio.sample_rate, audio.duration_seconds, section_duration)
+    start = _configured_start(audio.duration_seconds, section_duration)
+    method = "configured_start"
+    if start is None:
+        strategy = strategy or os.environ.get("PROMPT2MIDI_REFERENCE_SECTION_STRATEGY") or "stable_energy"
+        start = _choose_start(audio.samples, audio.sample_rate, audio.duration_seconds, section_duration, strategy)
+        method = "early_character_window" if strategy == "early_character" else "stable_energy_groove_window"
 
     output_path = os.path.abspath(os.path.join(output_dir, "reference-section.wav"))
     _extract_wav(audio_path, output_path, start, section_duration)
@@ -26,11 +36,28 @@ def prepare_reference_section(audio_path: str, output_dir: str, duration_seconds
         "start_seconds": round(start, 3),
         "duration_seconds": round(section_duration, 3),
         "source_duration_seconds": round(audio.duration_seconds, 3),
-        "method": "stable_energy_groove_window",
+        "method": method,
     }
 
 
-def _choose_start(samples: list[float], sample_rate: int, total_seconds: float, duration_seconds: float) -> float:
+def _configured_start(total_seconds: float, duration_seconds: float) -> float | None:
+    configured = os.environ.get("PROMPT2MIDI_REFERENCE_SECTION_START")
+    if configured in (None, ""):
+        return None
+    try:
+        start = float(str(configured).rstrip("s"))
+    except ValueError:
+        return None
+    return min(max(0.0, start), max(0.0, total_seconds - duration_seconds))
+
+
+def _choose_start(
+    samples: list[float],
+    sample_rate: int,
+    total_seconds: float,
+    duration_seconds: float,
+    strategy: str = "stable_energy",
+) -> float:
     if total_seconds <= duration_seconds + 0.5:
         return 0.0
 
@@ -40,6 +67,11 @@ def _choose_start(samples: list[float], sample_rate: int, total_seconds: float, 
     margin = min(20.0, max(4.0, total_seconds * 0.08))
     first = int(margin * sample_rate)
     last = max(first, int((total_seconds - duration_seconds - margin) * sample_rate))
+    if strategy == "early_character":
+        first_seconds = min(max(8.0, total_seconds * 0.04), max(0.0, total_seconds - duration_seconds))
+        last_seconds = min(max(first_seconds, total_seconds * 0.42), max(first_seconds, 90.0), max(0.0, total_seconds - duration_seconds))
+        first = int(first_seconds * sample_rate)
+        last = max(first, int(last_seconds * sample_rate))
 
     best_start = first
     best_score = -1.0

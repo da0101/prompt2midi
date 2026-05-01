@@ -57,7 +57,7 @@ def generate_sample(
     )
     model.set_custom_progress_callback(_token_progress)
 
-    description = _minimal_house_prompt(prompt)
+    description = _style_prompt(prompt)
     if mode == "melody":
         if not reference_audio:
             raise ValueError("melody mode requires --reference")
@@ -134,12 +134,14 @@ def _load_audio(path: str, target_channels: int):
     return wav, sample_rate
 
 
-def _minimal_house_prompt(prompt: str) -> str:
-    base = prompt.strip() or "underground minimal house"
+def _style_prompt(prompt: str) -> str:
+    base = prompt.strip()
+    if not base:
+        base = "reference-inspired instrumental music"
     return (
-        f"{base}. Underground minimal house, deep rolling groove, tight dry kick, "
-        "subtle shuffled hats, sparse syncopated percussion, dark hypnotic chord stabs, "
-        "warm analog bass, restrained club arrangement, clean low end, instrumental, no vocals."
+        f"{base}. Producer-grade original instrumental guide track, same tempo and key area as the reference, "
+        "clear drums, defined bassline, stable tonal harmony, recognizable hook role, clean mix, "
+        "no copied lyrics, no copied singer identity, no warped vocals, no random glitches, no atonal artifacts."
     )
 
 

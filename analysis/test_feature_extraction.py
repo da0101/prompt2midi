@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import struct
@@ -9,17 +10,32 @@ import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
 from feature_extraction import analyze_wav
-from analyze import _promote_exports, run as run_analysis
-from audio_generation import _condition_prompt, _sanitize_user_prompt_for_model
-from ace_step_generation import _choose_candidate, _select_candidate_for_promotion, _selection_score, _source_conditioning, _task_type
+from full_arrangement import build_arrangement_map, build_full_arrangement_package
+from full_guide_audio import generate_full_arrangement_guide_audio
+from external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
+from analyze import _promote_exports, _prompt_vocal_hint, _reference_sample_duration, run as run_analysis
+from audio_generation import _condition_prompt, _sanitize_user_prompt_for_model, _should_use_control_scaffold
+from ace_preflight import build_ace_preflight
+from ace_step_generation import (
+    _apply_level_quality_gate,
+    _build_payload,
+    _choose_candidate,
+    _caption,
+    _select_candidate_for_promotion,
+    _selection_score,
+    _source_conditioning,
+    _suggest_candidate,
+    _task_type,
+)
 from bass_transcription import transcribe_bassline
 from composition import _composition_style
 from drum_analysis import drum_pattern_to_midi_events
 from midi_extraction import write_note_events_midi, write_reference_sketch_midi
 from reference_transform import build_reference_transform
-from reference_groove import score_groove_similarity
+from reference_groove import _analyze_reference_groove_safe, score_groove_similarity
 from source_transcription import _extract_bassline, transcribe_with_model
 from stem_separation import separate_for_transcription
+from vocal_analysis import analyze_vocal_role
 
 
 class FeatureExtractionTest(unittest.TestCase):
@@ -99,6 +115,109 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertEqual(assets["bass_transcription"]["source_method"], "full_mix_low_frequency_tracking")
         self.assertFalse(result["analysis"]["model_transcription"]["available"])
         self.assertFalse(result["analysis"]["stem_separation"]["available"])
+        self.assertIn("full_arrangement", result)
+        full = result["full_arrangement"]
+        self.assertEqual(full["status"], "ready")
+        self.assertGreaterEqual(full["total_bars"], 1)
+        self.assertTrue(full["paths"]["arrangement_map"].endswith("arrangement-map.json"))
+        self.assertTrue(full["paths"]["analysis_report"].endswith("analysis-report.md"))
+        self.assertTrue(full["paths"]["suno_structure_prompt"].endswith("suno-structure-prompt.md"))
+        self.assertTrue(full["paths"]["full_arrangement_guide_midi"].endswith("full-arrangement-guide.mid"))
+
+    def test_full_arrangement_package_writes_suno_structure_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            analysis = {
+                "duration_seconds": 180.0,
+                "bpm": 120.0,
+                "bpm_confidence": 0.8,
+                "key": "A minor",
+                "key_confidence": 0.7,
+                "genre": {"primary": "Tech House", "tags": ["tech house", "minimal"], "confidence": 0.6},
+                "groove": {"description": "tight rolling club groove"},
+                "structure": {
+                    "method": "test_sections",
+                    "sections": [
+                        {"start": 0.0, "end": 32.0, "label": "intro", "energy": 0.25},
+                        {"start": 32.0, "end": 96.0, "label": "groove", "energy": 0.8},
+                        {"start": 96.0, "end": 128.0, "label": "breakdown", "energy": 0.15},
+                        {"start": 128.0, "end": 180.0, "label": "drop", "energy": 0.95},
+                    ],
+                },
+            }
+
+            package = build_full_arrangement_package(
+                analysis,
+                temp_dir,
+                user_prompt="darker bass, less vocal texture",
+                similarity_level="medium_high",
+            )
+
+            with open(package["paths"]["arrangement_map"], encoding="utf-8") as handle:
+                arrangement = json.load(handle)
+            with open(package["paths"]["analysis_report"], encoding="utf-8") as handle:
+                report = handle.read()
+            with open(package["paths"]["suno_structure_prompt"], encoding="utf-8") as handle:
+                prompt = handle.read()
+
+        self.assertEqual(package["status"], "ready")
+        self.assertEqual(arrangement["similarity_level"], "medium_high")
+        self.assertGreaterEqual(arrangement["total_bars"], 80)
+        self.assertEqual(arrangement["sections"][0]["role"], "intro")
+        self.assertIn("Arrangement Map", report)
+        self.assertIn("Use the attached ACE guide audio", prompt)
+        self.assertIn("darker bass", prompt)
+
+    def test_arrangement_map_falls_back_to_bar_grid_without_structure_model(self):
+        arrangement = build_arrangement_map(
+            {
+                "duration_seconds": 240.0,
+                "bpm": 120.0,
+                "key": "C minor",
+                "structure": {"sections": []},
+            },
+            similarity_level="low",
+        )
+
+        self.assertEqual(arrangement["method"], "fallback_bar_grid")
+        self.assertEqual(arrangement["similarity_level"], "low")
+        self.assertEqual(arrangement["sections"][0]["start_bar"], 1)
+        self.assertEqual(arrangement["sections"][-1]["end_bar"], arrangement["total_bars"])
+        self.assertTrue(any(section["role"] == "breakdown" for section in arrangement["sections"]))
+
+    def test_external_analyzers_degrade_when_disabled(self):
+        old_allin1 = os.environ.get("PROMPT2MIDI_DISABLE_ALLIN1")
+        old_essentia = os.environ.get("PROMPT2MIDI_DISABLE_ESSENTIA")
+        os.environ["PROMPT2MIDI_DISABLE_ALLIN1"] = "1"
+        os.environ["PROMPT2MIDI_DISABLE_ESSENTIA"] = "1"
+        try:
+            allin1 = analyze_allin1_structure("unused.wav", "/tmp")
+            essentia = analyze_essentia_descriptors("unused.wav", "/tmp")
+        finally:
+            if old_allin1 is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_ALLIN1", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_ALLIN1"] = old_allin1
+            if old_essentia is None:
+                os.environ.pop("PROMPT2MIDI_DISABLE_ESSENTIA", None)
+            else:
+                os.environ["PROMPT2MIDI_DISABLE_ESSENTIA"] = old_essentia
+
+        self.assertFalse(allin1["available"])
+        self.assertFalse(essentia["available"])
+        self.assertIn("disabled", allin1["warnings"][0])
+        self.assertIn("disabled", essentia["warnings"][0])
+
+    def test_full_guide_audio_is_disabled_by_default(self):
+        result = generate_full_arrangement_guide_audio(
+            reference_audio="unused.wav",
+            output_dir="/tmp",
+            analysis={},
+            full_arrangement={"sections": [{"start_seconds": 0, "end_seconds": 8, "role": "intro"}]},
+            user_prompt="",
+        )
+
+        self.assertEqual(result["status"], "not_generated")
+        self.assertIn("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", result["reason"])
 
     def test_model_transcription_can_be_explicitly_disabled(self):
         old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
@@ -301,6 +420,7 @@ class FeatureExtractionTest(unittest.TestCase):
         medium = build_reference_transform("medium similarity, keep the pocket", {})
         medium_high = build_reference_transform("medium-high similarity, close but not high", {})
         high = build_reference_transform("high similarity, keep the groove", {})
+        very_high = build_reference_transform("very high similarity, close but not copied", {})
         near = build_reference_transform("identical similarity with a twist", {})
 
         self.assertEqual(low["similarity_profile"]["id"], "low")
@@ -308,11 +428,14 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertEqual(medium["similarity_profile"]["id"], "medium")
         self.assertEqual(medium_high["similarity_profile"]["id"], "medium_high")
         self.assertEqual(high["similarity_profile"]["id"], "high")
+        self.assertEqual(very_high["similarity_profile"]["id"], "very_high")
         self.assertEqual(near["similarity_profile"]["id"], "near_identical_twist")
         self.assertLess(low["groove_similarity"], medium_low["groove_similarity"])
         self.assertLess(medium_low["groove_similarity"], medium["groove_similarity"])
         self.assertLess(medium["groove_similarity"], medium_high["groove_similarity"])
         self.assertLess(medium_high["groove_similarity"], high["groove_similarity"])
+        self.assertLess(high["groove_similarity"], very_high["groove_similarity"])
+        self.assertLess(very_high["groove_similarity"], near["groove_similarity"])
         self.assertLess(high["groove_similarity"], near["groove_similarity"])
         self.assertLess(near["groove_similarity"], 0.96)
 
@@ -323,7 +446,7 @@ class FeatureExtractionTest(unittest.TestCase):
         )
 
         self.assertEqual(transform["similarity_profile"]["id"], "high")
-        self.assertAlmostEqual(transform["groove_similarity"], 0.8)
+        self.assertAlmostEqual(transform["groove_similarity"], 0.52)
 
     def test_low_similarity_still_uses_reference_style_floor(self):
         transform = build_reference_transform(
@@ -335,9 +458,11 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertAlmostEqual(transform["groove_similarity"], 0.2)
         self.assertEqual(transform["generation_mode"], "source_conditioned")
-        self.assertEqual(task_type, "text2music")
-        self.assertEqual(float(conditioning["reference_strength"]), 0.0)
-        self.assertEqual(float(conditioning["cover_noise_strength"]), 0.0)
+        self.assertEqual(task_type, "cover")
+        self.assertGreaterEqual(float(conditioning["reference_strength"]), 0.2)
+        self.assertGreaterEqual(float(conditioning["cover_noise_strength"]), 0.1)
+        self.assertLessEqual(float(conditioning["reference_strength"]), 0.3)
+        self.assertLessEqual(float(conditioning["cover_noise_strength"]), 0.18)
         self.assertIn("same BPM", transform["prompt"])
 
         conditioned = _condition_prompt(
@@ -364,18 +489,440 @@ class FeatureExtractionTest(unittest.TestCase):
             for transform, task in zip(levels, tasks, strict=True)
         ]
 
-        self.assertEqual(tasks[0], "text2music")
-        self.assertEqual(tasks[1:], ["cover", "cover", "cover", "cover", "cover"])
+        self.assertEqual(tasks, ["cover", "cover", "cover", "cover", "cover", "cover"])
         self.assertLess(float(conditioning[1]["reference_strength"]), float(conditioning[2]["reference_strength"]))
         self.assertLess(float(conditioning[2]["reference_strength"]), float(conditioning[3]["reference_strength"]))
         self.assertLess(float(conditioning[3]["reference_strength"]), float(conditioning[4]["reference_strength"]))
         self.assertLess(float(conditioning[4]["reference_strength"]), float(conditioning[5]["reference_strength"]))
         self.assertGreater(
-            float(conditioning[5]["reference_strength"]) - float(conditioning[1]["reference_strength"]),
-            0.2,
+            float(conditioning[5]["reference_strength"]) - float(conditioning[3]["reference_strength"]),
+            0.45,
         )
         self.assertIn("micro-percussion", near["prompt"])
         self.assertIn("rhythmic vocal", near["prompt"])
+        self.assertTrue(high["bass"]["vary_notes"])
+        self.assertTrue(medium_high["bass"]["vary_notes"])
+        self.assertLess(medium_high["bass"]["source_pitch_lock"], high["bass"]["source_pitch_lock"])
+        self.assertLess(high["bass"]["source_pitch_lock"], near["bass"]["source_pitch_lock"])
+        self.assertIn("must still be audibly changed", high["prompt"])
+        self.assertIn("audibly different", medium_high["prompt"])
+        self.assertAlmostEqual(float(conditioning[0]["reference_strength"]), 0.21)
+        self.assertAlmostEqual(float(conditioning[0]["cover_noise_strength"]), 0.11)
+        self.assertGreater(low["bass"]["variation_amount"], medium["bass"]["variation_amount"])
+        self.assertIn("style, energy, BPM", low["prompt"])
+        self.assertIn("signature sounds", low["prompt"])
+
+    def test_very_high_profile_sits_between_high_and_near_identical(self):
+        high = build_reference_transform("", {"reference_similarity_level": "high"})
+        very_high = build_reference_transform("", {"reference_similarity_level": "very-high"})
+        near = build_reference_transform("", {"reference_similarity_level": "near-identical"})
+        high_task = _task_type(high, high["groove_similarity"])
+        very_task = _task_type(very_high, very_high["groove_similarity"])
+        near_task = _task_type(near, near["groove_similarity"])
+        high_controls = _source_conditioning(high, high["groove_similarity"], is_cover=high_task == "cover")
+        very_controls = _source_conditioning(very_high, very_high["groove_similarity"], is_cover=very_task == "cover")
+        near_controls = _source_conditioning(near, near["groove_similarity"], is_cover=near_task == "cover")
+
+        self.assertEqual(very_high["similarity_profile"]["id"], "very_high")
+        self.assertGreater(very_high["groove_similarity"], high["groove_similarity"])
+        self.assertLess(very_high["groove_similarity"], near["groove_similarity"])
+        self.assertGreater(float(very_controls["reference_strength"]), float(high_controls["reference_strength"]))
+        self.assertLess(float(very_controls["reference_strength"]), float(near_controls["reference_strength"]))
+        self.assertIn("reference-locked", very_high["prompt"])
+
+    def test_ace_preflight_flags_rich_vocal_reference_for_yue(self):
+        analysis = {
+            "reference_similarity_level": "medium",
+            "bpm": 118.0,
+            "bpm_confidence": 0.8,
+            "key": "C minor",
+            "genre": {"primary": "dance pop / funk", "tags": ["dance pop", "funk", "soul"], "confidence": 0.7},
+            "chords": {"confidence": 0.85, "progression": ["Cm", "Ab", "Eb", "Bb", "Fm", "Gm"]},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.9},
+        }
+        transform = build_reference_transform("same groove but new vocal hook", analysis)
+        preflight = build_ace_preflight(analysis, transform, "same groove but new vocal hook")
+
+        self.assertIn(preflight["ace_suitability"], {"low", "medium-low"})
+        self.assertIn("yue", preflight["recommended_generator"])
+        self.assertTrue(any(risk["code"] == "lead_vocal_or_hook" for risk in preflight["risk_reasons"]))
+        self.assertIn("RunPod YuE", preflight["message"])
+
+    def test_ace_preflight_accepts_groove_driven_house_reference(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 126.0,
+            "bpm_confidence": 0.85,
+            "key": "C minor",
+            "genre": {"primary": "minimal tech house", "tags": ["minimal house", "tech house", "club"], "confidence": 0.8},
+            "chords": {"confidence": 0.4, "progression": ["Cm", "Cm", "Ab", "Cm"]},
+            "vocals": {"available": False, "present": False, "role": "none", "confidence": 0.0},
+        }
+        transform = build_reference_transform("same energy, new bassline", analysis)
+        preflight = build_ace_preflight(analysis, transform, "same energy, new bassline")
+
+        self.assertIn(preflight["ace_suitability"], {"high", "medium"})
+        self.assertEqual(preflight["recommended_generator"], "ace_step")
+        self.assertEqual(preflight["hidden_controls"]["route"], "source_conditioned_cover")
+        self.assertGreaterEqual(preflight["hidden_controls"]["reference_strength"], 0.18)
+
+    def test_ace_preflight_hidden_controls_override_near_identical_copy_pressure(self):
+        analysis = {
+            "reference_similarity_level": "near-identical",
+            "bpm": 126.0,
+            "bpm_confidence": 0.8,
+            "key": "C minor",
+            "genre": {"primary": "electro house", "tags": ["electro house", "club"], "confidence": 0.75},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.82},
+        }
+        transform = build_reference_transform("very close but do not copy the original singer", analysis)
+        preflight = build_ace_preflight(analysis, transform, "very close but do not copy the original singer")
+        transform["ace_preflight"] = preflight
+        conditioning = _source_conditioning(transform, transform["groove_similarity"], is_cover=True)
+
+        self.assertEqual(preflight["hidden_controls"]["recommended_profile"], "very_high_reference_locked")
+        self.assertLess(float(conditioning["reference_strength"]), 0.72)
+        self.assertLess(float(conditioning["cover_noise_strength"]), 0.48)
+
+    def test_bass_rhythm_sound_lock_keeps_source_conditioning_stronger(self):
+        analysis = {
+            "reference_similarity_level": "near-identical",
+            "bpm": 126.0,
+            "bpm_confidence": 0.82,
+            "key": "C minor",
+            "genre": {"primary": "electro house", "tags": ["electro house", "club"], "confidence": 0.75},
+            "chords": {"confidence": 0.8, "progression": ["Cm", "Ab", "Bb", "Gm", "Fm"]},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.8},
+        }
+        prompt = "same bass line rhythm and same bassline sound but different notes"
+        transform = build_reference_transform(prompt, analysis)
+        preflight = build_ace_preflight(analysis, transform, prompt)
+        transform["ace_preflight"] = preflight
+        conditioning = _source_conditioning(transform, transform["groove_similarity"], is_cover=True)
+        conditioned = _condition_prompt(prompt, {}, transform)
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt=conditioned,
+            analysis={**analysis, "reference_transform": transform, "ace_preflight": preflight},
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertTrue(transform["bass"]["preserve_sound_design"])
+        self.assertTrue(transform["bass"]["vary_notes"])
+        self.assertGreaterEqual(transform["bass"]["source_rhythm_lock"], 0.95)
+        self.assertEqual(preflight["hidden_controls"]["route"], "source_conditioned_cover_bass_locked")
+        self.assertEqual(preflight["hidden_controls"]["bass_lock_mode"], "same_rhythm_same_sound_different_notes")
+        self.assertGreaterEqual(float(conditioning["reference_strength"]), 0.46)
+        self.assertGreaterEqual(float(conditioning["cover_noise_strength"]), 0.18)
+        self.assertIn("same bassline rhythm", conditioned)
+        self.assertIn("avoid glitchy bass", payload["prompt"])
+        self.assertIn("glitchy bass", payload["lm_negative_prompt"])
+        self.assertAlmostEqual(payload["reference_similarity"], preflight["hidden_controls"]["recommended_similarity"])
+        self.assertFalse(_should_use_control_scaffold(transform, prompt))
+
+    def test_control_scaffold_is_explicit_only(self):
+        previous = os.environ.get("PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD")
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD"] = "1"
+            self.assertTrue(_should_use_control_scaffold({}, "same bassline rhythm"))
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD", None)
+            else:
+                os.environ["PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD"] = previous
+
+    def test_safe_reference_groove_extracts_bass_grid_for_fast_lane(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wav_path = os.path.join(temp_dir, "running-bass.wav")
+            self._write_running_bass_wav(wav_path, bpm=120)
+
+            groove = _analyze_reference_groove_safe(wav_path, 120.0, {"path": wav_path, "start_seconds": 0.0})
+            transform = build_reference_transform(
+                "same bass line rhythm and same bassline sound but different notes",
+                {
+                    "reference_similarity_level": "high",
+                    "bpm": 120.0,
+                    "key": "C minor",
+                    "genre": {"primary": "electro house", "tags": ["electro house", "club"]},
+                    "vocals": {"present": False},
+                },
+            )
+            conditioned = _condition_prompt(
+                "same bass line rhythm and same bassline sound but different notes",
+                groove,
+                transform,
+            )
+
+        self.assertEqual(groove["method"], "safe_fft_band_groove_fingerprint")
+        self.assertTrue(groove["bass_accent_pattern_16th"])
+        self.assertIn("bass accents", groove["prompt"])
+        self.assertIn("bass rhythm accents", conditioned)
+        self.assertIn("same bassline rhythm", conditioned)
+
+    def test_chord_root_can_correct_wrong_detected_key_for_ace_payload(self):
+        analysis = {
+            "reference_similarity_level": "high",
+            "bpm": 126.0,
+            "key": "C minor",
+            "genre": {"primary": "electro house", "tags": ["electro house", "club"], "confidence": 0.75},
+            "chords": {
+                "confidence": 0.82,
+                "progression": ["C#", "G#", "C#", "F#", "C#", "A", "C#", "G#", "C#", "D#"],
+            },
+            "vocals": {"present": False},
+        }
+        transform = build_reference_transform("same bass line rhythm and same bassline sound but different notes", analysis)
+        analysis["reference_transform"] = transform
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt="same bass line rhythm and same bassline sound but different notes",
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertEqual(transform["harmonic"]["key"], "C# minor")
+        self.assertEqual(payload["key_scale"], "C# Minor")
+
+    def test_medium_high_uses_previous_accepted_medium_low_anchor(self):
+        medium_high = build_reference_transform("", {"reference_similarity_level": "medium-high"})
+        task = _task_type(medium_high, medium_high["groove_similarity"])
+        conditioning = _source_conditioning(medium_high, medium_high["groove_similarity"], is_cover=task == "cover")
+
+        self.assertEqual(task, "cover")
+        self.assertAlmostEqual(medium_high["groove_similarity"], 0.4)
+        self.assertAlmostEqual(float(conditioning["reference_strength"]), 0.2)
+        self.assertAlmostEqual(float(conditioning["cover_noise_strength"]), 0.1)
+        self.assertGreaterEqual(medium_high["bass"]["variation_amount"], 0.55)
+        self.assertIn("calibrated medium-high anchor", medium_high["prompt"])
+
+    def test_low_and_medium_low_similarity_prompts_stay_musical(self):
+        low = build_reference_transform("", {"reference_similarity_level": "low"})
+        medium_low = build_reference_transform("", {"reference_similarity_level": "medium-low"})
+
+        self.assertIn("staying tonal", low["prompt"])
+        self.assertIn("style-usable", low["prompt"])
+        self.assertIn("producer-clean", low["prompt"])
+        self.assertIn("robotic", low["prompt"])
+        self.assertIn("club-focused", medium_low["prompt"])
+        self.assertIn("same genre", medium_low["prompt"])
+
+    def test_vocal_reference_preserves_new_vocal_hook_role(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 126.0,
+            "key": "C minor",
+            "genre": {"primary": "electro house", "tags": ["electro house", "club"], "confidence": 0.7},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.82},
+        }
+        transform = build_reference_transform("electronic house club track", analysis)
+        analysis["reference_transform"] = transform
+
+        conditioned = _condition_prompt("electronic house club track", {}, transform)
+        caption = _caption("electronic house club track", analysis)
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt="electronic house club track",
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertTrue(transform["vocals"]["preserve_role"])
+        self.assertTrue(transform["harmonic"]["strict_scale"])
+        self.assertIn("inside C minor", transform["prompt"])
+        self.assertIn("lead vocal hook", transform["prompt"])
+        self.assertIn("original words", conditioned)
+        self.assertIn("inside C minor", conditioned)
+        self.assertIn("new lead vocal hook", caption)
+        self.assertIn("inside C minor", caption)
+        self.assertFalse(payload["instrumental"])
+        self.assertNotEqual(payload["lyrics"], "[Instrumental]")
+        self.assertNotIn("lead vocals, lyrical singing", payload["lm_negative_prompt"])
+        self.assertIn("copied lyrics", payload["lm_negative_prompt"])
+        self.assertIn("out-of-scale lead notes", payload["lm_negative_prompt"])
+
+    def test_fast_lane_conditional_vocal_wording_does_not_force_vocal_resynthesis(self):
+        vocal_hint = _prompt_vocal_hint("new synth or vocal hook if reference has vocals")
+        self.assertFalse(vocal_hint["present"])
+
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 120.0,
+            "key": "F major",
+            "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.2},
+            "genre_deep": {"primary": "breakbeat", "tags": ["breakbeat", "classic rock"], "confidence": 0.02},
+            "groove": {"description": "minimal steady groove"},
+            "vocals": vocal_hint,
+        }
+        transform = build_reference_transform("new synth or vocal hook if reference has vocals", analysis)
+        analysis["reference_transform"] = transform
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt="new synth or vocal hook if reference has vocals",
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertEqual(transform["style"]["primary"], "Electronic (120-135 BPM)")
+        self.assertNotIn("breakbeat", transform["style_brief"])
+        self.assertFalse(transform["vocals"]["preserve_role"])
+        self.assertTrue(payload["instrumental"])
+        self.assertEqual(payload["lyrics"], "[Instrumental]")
+
+    def test_unreliable_low_vocal_reference_uses_text_only_instrumental_hook_proxy(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 126.0,
+            "key": "C minor",
+            "genre": {"primary": "electro house", "tags": ["electro house", "club"], "confidence": 0.7},
+            "vocals": {"available": False, "present": True, "role": "lead vocal hook", "confidence": 0.55, "method": "user_direction_hint"},
+        }
+        prompt = "electronic house club track with hook character, no lead vocal resynthesis"
+        transform = build_reference_transform(prompt, analysis)
+        analysis["reference_transform"] = transform
+        conditioned = _condition_prompt(prompt, {}, transform)
+        caption = _caption(prompt, analysis)
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt=prompt,
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertEqual(transform["vocals"]["render_mode"], "instrumental_hook_proxy")
+        self.assertTrue(transform["rich_reference"]["enabled"])
+        self.assertIn("rich-reference safety", transform["prompt"])
+        self.assertIn("instrumental hook proxy", caption)
+        self.assertIn("do not attempt lead vocal resynthesis", conditioned)
+        self.assertTrue(payload["instrumental"])
+        self.assertEqual(payload["lyrics"], "[Instrumental]")
+        self.assertEqual(payload["task_type"], "text2music")
+        self.assertEqual(payload["reference_audio_path"], None)
+        self.assertEqual(payload["src_audio_path"], None)
+        self.assertEqual(payload["audio_cover_strength"], 0.0)
+        self.assertEqual(payload["cover_noise_strength"], 0.0)
+        self.assertIn("stretched vocal chops", payload["lm_negative_prompt"])
+
+    def test_negative_vocal_prompt_does_not_infer_fast_lane_vocals(self):
+        vocal_hint = _prompt_vocal_hint("clean synth hook, no lead vocal resynthesis, no stretched vocal chops")
+
+        self.assertFalse(vocal_hint["present"])
+        self.assertEqual(vocal_hint["role"], "none")
+
+    def test_low_dense_harmonic_reference_uses_text_only_rich_reference_mode(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 120.0,
+            "key": "F major",
+            "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.2},
+            "chords": {"confidence": 0.8, "progression": ["F", "G#", "C#", "F#", "C", "D#"]},
+            "vocals": {"available": False, "present": False, "role": "none", "confidence": 0.0},
+        }
+        transform = build_reference_transform("clean synth hook, no lead vocal resynthesis", analysis)
+        analysis["reference_transform"] = transform
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt="clean synth hook, no lead vocal resynthesis",
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertTrue(transform["rich_reference"]["enabled"])
+        self.assertIn("rich harmonic movement", transform["rich_reference"]["reason"])
+        self.assertEqual(transform["similarity_profile"]["reference_mode"], "analysis_text_only")
+        self.assertTrue(payload["instrumental"])
+        self.assertEqual(payload["task_type"], "text2music")
+        self.assertEqual(payload["reference_audio_path"], None)
+        self.assertEqual(payload["src_audio_path"], None)
+        self.assertEqual(payload["audio_cover_strength"], 0.0)
+        self.assertEqual(payload["cover_noise_strength"], 0.0)
+
+    def test_instrumental_reference_still_bans_lead_vocals(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "vocals": {"present": False, "role": "none"},
+        }
+        transform = build_reference_transform("", analysis)
+        analysis["reference_transform"] = transform
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt="",
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertFalse(transform["vocals"]["preserve_role"])
+        self.assertTrue(payload["instrumental"])
+        self.assertEqual(payload["lyrics"], "[Instrumental]")
+        self.assertIn("lead vocals, lyrical singing", payload["lm_negative_prompt"])
+
+    def test_vocal_stem_activity_detects_lead_hook_role(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stem_dir = os.path.join(temp_dir, "stems")
+            os.makedirs(stem_dir)
+            vocal_path = os.path.join(stem_dir, "vocals.wav")
+            bass_path = os.path.join(stem_dir, "bass.wav")
+            drums_path = os.path.join(stem_dir, "drums.wav")
+            other_path = os.path.join(stem_dir, "other.wav")
+            self._write_constant_sine_wav(vocal_path, amplitude=0.22, frequency=440)
+            self._write_constant_sine_wav(bass_path, amplitude=0.12, frequency=80)
+            self._write_constant_sine_wav(drums_path, amplitude=0.12, frequency=160)
+            self._write_constant_sine_wav(other_path, amplitude=0.04, frequency=330)
+
+            result = analyze_vocal_role(
+                {"stems": {"vocals": vocal_path, "bass": bass_path, "drums": drums_path, "other": other_path}}
+            )
+
+        self.assertTrue(result["available"])
+        self.assertTrue(result["present"])
+        self.assertEqual(result["role"], "lead vocal hook")
+        self.assertGreater(result["confidence"], 0.5)
+
+    def test_explicit_house_direction_overrides_noisy_reference_genre(self):
+        transform = build_reference_transform(
+            "underground minimal deep tech house, rolling bassline, no cheesy pop",
+            {
+                "genre_deep": {
+                    "primary": "breakbeat",
+                    "tags": ["breakbeat", "classic rock"],
+                    "confidence": 0.42,
+                },
+                "bpm": 126,
+                "key": "F minor",
+            },
+        )
+
+        self.assertEqual(transform["style"]["primary"], "underground minimal / deep tech house")
+        self.assertIn("deep tech house", transform["style_brief"])
+        self.assertNotIn("breakbeat", transform["style_brief"])
+
+    def test_reference_sample_duration_can_use_full_source_length(self):
+        previous = os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION")
+        try:
+            os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "full"
+            self.assertEqual(_reference_sample_duration({"duration_seconds": 211.5}), 211.5)
+            os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "45"
+            self.assertEqual(_reference_sample_duration({"duration_seconds": 211.5}), 45.0)
+            os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "999"
+            self.assertEqual(_reference_sample_duration({"duration_seconds": 211.5}), 211.5)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = previous
 
     def test_low_similarity_candidate_selection_prefers_originality(self):
         close_copy = _selection_score(quality_score=0.82, exact_similarity_score=0.72, target_similarity=0.2)
@@ -385,6 +932,31 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertGreater(more_original, close_copy)
         self.assertGreater(high_similarity_copy, high_similarity_loose)
+
+    def test_low_similarity_candidate_gate_prefers_accepted_house_pulse(self):
+        accepted = {
+            "path": "candidate-1.wav",
+            "quality": {"score": 0.73, "selection_score": 0.806, "pulse_score": 0.557, "timbre_score": 0.671},
+        }
+        rejected_timbre_artifact = {
+            "path": "candidate-2.wav",
+            "quality": {"score": 0.463, "selection_score": 0.613, "pulse_score": 0.425, "timbre_score": 0.446},
+        }
+        rejected_weak_pulse = {
+            "path": "candidate-3.wav",
+            "quality": {"score": 0.685, "selection_score": 0.773, "pulse_score": 0.414, "timbre_score": 0.694},
+        }
+
+        for candidate in (accepted, rejected_timbre_artifact, rejected_weak_pulse):
+            _apply_level_quality_gate(candidate["quality"], target_similarity=0.3)
+
+        suggested = _suggest_candidate([rejected_timbre_artifact, rejected_weak_pulse, accepted])
+
+        self.assertEqual(suggested["path"], "candidate-1.wav")
+        self.assertTrue(accepted["quality"]["level_gate"]["passed"])
+        self.assertFalse(rejected_timbre_artifact["quality"]["level_gate"]["passed"])
+        self.assertFalse(rejected_weak_pulse["quality"]["level_gate"]["passed"])
+        self.assertIn("club pulse", rejected_weak_pulse["quality"]["warnings"][0])
 
     def test_candidate_selection_can_be_overridden_after_listening(self):
         previous = os.environ.get("PROMPT2MIDI_ACE_STEP_SELECT_CANDIDATE")
@@ -524,6 +1096,42 @@ class FeatureExtractionTest(unittest.TestCase):
                 envelope = 0.9 if index < sample_rate * 0.85 else 0.2
                 tone = math.sin(2 * math.pi * frequency * time)
                 samples.append(int(envelope * tone * 32767))
+
+        with wave.open(path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    @staticmethod
+    def _write_running_bass_wav(path: str, bpm: int):
+        sample_rate = 8000
+        seconds = 8
+        eighth = 60.0 / bpm / 2.0
+        samples = []
+        for index in range(sample_rate * seconds):
+            time = index / sample_rate
+            phase = time % eighth
+            envelope = 0.95 if phase < 0.12 else 0.05
+            tone = math.sin(2 * math.pi * 65.406 * time)
+            click = math.sin(2 * math.pi * 95.0 * time) * 0.18
+            samples.append(int(max(-1.0, min(1.0, envelope * (tone + click))) * 32767))
+
+        with wave.open(path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    @staticmethod
+    def _write_constant_sine_wav(path: str, amplitude: float, frequency: float):
+        sample_rate = 8000
+        seconds = 2
+        samples = []
+        for index in range(sample_rate * seconds):
+            time = index / sample_rate
+            tone = math.sin(2 * math.pi * frequency * time)
+            samples.append(int(max(-1.0, min(1.0, amplitude * tone)) * 32767))
 
         with wave.open(path, "wb") as wav_file:
             wav_file.setnchannels(1)

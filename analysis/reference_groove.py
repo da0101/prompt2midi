@@ -35,16 +35,131 @@ def analyze_reference_groove(audio_path: str, bpm: float | None, section: dict |
     if not audio_path or not os.path.exists(audio_path):
         return dict(_FALLBACK)
     if _should_skip_unsafe_groove():
-        fallback = dict(_FALLBACK)
-        fallback["warnings"] = [
-            "Reference groove analysis skipped because the local macOS Python 3.14 librosa/numba stack can segfault. "
-            "Set PROMPT2MIDI_ENABLE_UNSAFE_REFERENCE_GROOVE=1 to opt in."
-        ]
-        return fallback
+        return _analyze_reference_groove_safe(audio_path, bpm, section)
     if os.environ.get("PROMPT2MIDI_REFERENCE_GROOVE_CHILD") != "1":
         return _analyze_reference_groove_subprocess(audio_path, bpm, section)
 
     return _analyze_reference_groove_unsafe(audio_path, bpm, section)
+
+
+def _analyze_reference_groove_safe(audio_path: str, bpm: float | None, section: dict | None = None) -> dict:
+    """Safe FFT-band groove fingerprint without librosa/numba."""
+    try:
+        import wave
+        import numpy as np
+
+        source_path = (section or {}).get("path") if (section or {}).get("path") else audio_path
+        with wave.open(source_path, "rb") as wav:
+            channels = wav.getnchannels()
+            sample_width = wav.getsampwidth()
+            sr = wav.getframerate()
+            raw = wav.readframes(wav.getnframes())
+        if sample_width == 1:
+            data = np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
+            data = (data - 128.0) / 128.0
+        elif sample_width == 2:
+            data = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+        elif sample_width == 3:
+            bytes_data = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3)
+            signed = (
+                bytes_data[:, 0].astype(np.int32)
+                | (bytes_data[:, 1].astype(np.int32) << 8)
+                | (bytes_data[:, 2].astype(np.int32) << 16)
+            )
+            signed = np.where(signed & 0x800000, signed - 0x1000000, signed)
+            data = signed.astype(np.float32) / 8388608.0
+        elif sample_width == 4:
+            data = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
+        else:
+            return _safe_fallback("Unsupported WAV bit depth for safe groove analysis.")
+        if channels > 1:
+            data = data.reshape(-1, channels).mean(axis=1)
+        if data.size < sr * 2:
+            return _safe_fallback("Reference is too short for safe groove analysis.")
+
+        max_seconds = float(os.environ.get("PROMPT2MIDI_SAFE_GROOVE_SECONDS") or "48")
+        if data.size > int(sr * max_seconds):
+            data = data[: int(sr * max_seconds)]
+
+        tempo = _coerce_bpm(bpm)
+        sixteenth = 60.0 / tempo / 4.0
+        hop = max(256, int(sr * 0.018))
+        frame = max(1024, int(sr * 0.06))
+        if frame % 2:
+            frame += 1
+        window = np.hanning(frame).astype(np.float32)
+        freqs = np.fft.rfftfreq(frame, 1.0 / sr)
+        kick_mask = (freqs >= 35.0) & (freqs <= 130.0)
+        bass_mask = (freqs >= 45.0) & (freqs <= 260.0)
+        hat_mask = (freqs >= 2500.0) & (freqs <= min(9000.0, sr / 2.0))
+        full_values = []
+        kick_values = []
+        bass_values = []
+        hat_values = []
+        times = []
+        for start in range(0, max(1, data.size - frame), hop):
+            chunk = data[start : start + frame]
+            if chunk.size < frame:
+                break
+            spectrum = np.abs(np.fft.rfft(chunk * window))
+            full_values.append(float(np.mean(spectrum)))
+            kick_values.append(float(np.mean(spectrum[kick_mask])) if kick_mask.any() else 0.0)
+            bass_values.append(float(np.mean(spectrum[bass_mask])) if bass_mask.any() else 0.0)
+            hat_values.append(float(np.mean(spectrum[hat_mask])) if hat_mask.any() else 0.0)
+            times.append((start + frame / 2.0) / sr)
+
+        if len(times) < 8:
+            return _safe_fallback("Safe groove analysis did not collect enough frames.")
+
+        kick_pattern = _pattern_from_envelope(times, kick_values, sixteenth, mode="onset")
+        bass_pattern = _pattern_from_envelope(times, bass_values, sixteenth, mode="energy")
+        hat_pattern = _pattern_from_envelope(times, hat_values, sixteenth, mode="onset")
+        low_end_weight = _safe_low_end_weight(full_values, bass_values)
+        drum_feel = _drum_feel(kick_pattern)
+        bass_feel = _bass_feel(bass_pattern)
+        club_energy = _safe_club_energy(full_values, bass_values, kick_pattern, bass_pattern)
+        prompt = _build_prompt(
+            kick_pattern=kick_pattern,
+            bass_pattern=bass_pattern,
+            hat_pattern=hat_pattern,
+            bass_motif=[],
+            bass_notes=[],
+            swing=0.0,
+            low_end_weight=low_end_weight,
+            drum_feel=drum_feel,
+            bass_feel=bass_feel,
+            club_energy=club_energy,
+        )
+        return {
+            "method": "safe_fft_band_groove_fingerprint",
+            "kick_pattern_16th": kick_pattern,
+            "bass_accent_pattern_16th": bass_pattern,
+            "hat_pattern_16th": hat_pattern,
+            "bass_motif_16th": [],
+            "bass_notes": [],
+            "swing": 0.0,
+            "low_end_weight": low_end_weight,
+            "drum_feel": drum_feel,
+            "bass_feel": bass_feel,
+            "club_energy": club_energy,
+            "prompt": prompt,
+            "section_start_seconds": (section or {}).get("start_seconds"),
+            "warnings": [
+                "Safe groove fingerprint uses FFT band energy instead of librosa to avoid local macOS Python crashes."
+            ],
+        }
+    except Exception as exc:
+        return _safe_fallback(f"Safe reference groove analysis failed: {exc}")
+
+
+def _safe_fallback(reason: str) -> dict:
+    fallback = dict(_FALLBACK)
+    fallback["warnings"] = [
+        reason,
+        "Reference groove analysis skipped because the local macOS Python 3.14 librosa/numba stack can segfault. "
+        "Set PROMPT2MIDI_ENABLE_UNSAFE_REFERENCE_GROOVE=1 to opt in.",
+    ]
+    return fallback
 
 
 def _analyze_reference_groove_subprocess(audio_path: str, bpm: float | None, section: dict | None = None) -> dict:
@@ -229,6 +344,72 @@ def _dominant_pattern(times, sixteenth: float, bars: int = 2) -> list[int]:
         ranked = sorted(range(steps), key=lambda index: counts[index], reverse=True)[:12]
         positions = sorted(ranked)
     return positions
+
+
+def _pattern_from_envelope(times: list[float], values: list[float], sixteenth: float, mode: str = "onset") -> list[int]:
+    try:
+        import numpy as np
+    except Exception:
+        return []
+    if not times or not values:
+        return []
+    values_np = np.asarray(values, dtype=np.float32)
+    if values_np.size < 3:
+        return []
+    if mode == "onset":
+        scores = np.maximum(0.0, np.diff(values_np, prepend=values_np[0]))
+    else:
+        scores = values_np
+    if float(np.max(scores)) <= 0.0:
+        return []
+    buckets = [0.0] * 32
+    counts = [0] * 32
+    for time_value, score in zip(times, scores):
+        index = int(round(float(time_value) / sixteenth)) % 32
+        buckets[index] += float(score)
+        counts[index] += 1
+    normalized = [value / max(1, count) for value, count in zip(buckets, counts)]
+    positive = [value for value in normalized if value > 0.0]
+    if not positive:
+        return []
+    threshold = max(float(np.percentile(positive, 68)), max(positive) * 0.32)
+    positions = [index for index, value in enumerate(normalized) if value >= threshold]
+    if mode == "energy" and len(positions) < 6:
+        threshold = max(float(np.percentile(positive, 52)), max(positive) * 0.22)
+        positions = [index for index, value in enumerate(normalized) if value >= threshold]
+    if len(positions) > 18:
+        ranked = sorted(range(32), key=lambda index: normalized[index], reverse=True)[:18]
+        positions = sorted(ranked)
+    return positions
+
+
+def _safe_low_end_weight(full_values: list[float], bass_values: list[float]) -> str:
+    if not full_values or not bass_values:
+        return "medium"
+    full = sum(full_values) / max(1, len(full_values))
+    bass = sum(bass_values) / max(1, len(bass_values))
+    ratio = bass / max(full, 1e-9)
+    if ratio >= 0.72:
+        return "heavy"
+    if ratio >= 0.48:
+        return "solid"
+    return "medium"
+
+
+def _safe_club_energy(
+    full_values: list[float],
+    bass_values: list[float],
+    kick_pattern: list[int],
+    bass_pattern: list[int],
+) -> str:
+    full = sum(full_values) / max(1, len(full_values)) if full_values else 0.0
+    bass = sum(bass_values) / max(1, len(bass_values)) if bass_values else 0.0
+    density = len(kick_pattern) + len(bass_pattern)
+    if full > 0.02 and bass > 0.01 and density >= 16:
+        return "banger"
+    if density >= 10:
+        return "club"
+    return "restrained"
 
 
 def _estimate_swing(hat_times, sixteenth: float) -> float:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ACE-Step REST client for reference-inspired 30-second music samples."""
+"""ACE-Step REST client for reference-inspired music samples."""
 from __future__ import annotations
 
 import argparse
@@ -41,7 +41,7 @@ def generate_with_ace_step(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     base_url = (os.environ.get("PROMPT2MIDI_ACE_STEP_URL") or DEFAULT_BASE_URL).rstrip("/")
     model = os.environ.get("PROMPT2MIDI_ACE_STEP_MODEL") or DEFAULT_MODEL
-    candidate_count = candidates or int(os.environ.get("PROMPT2MIDI_ACE_STEP_CANDIDATES") or "3")
+    candidate_count = candidates or int(os.environ.get("PROMPT2MIDI_ACE_STEP_CANDIDATES") or "4")
     candidate_count = max(1, min(6, candidate_count))
 
     _health_check(base_url)
@@ -101,16 +101,19 @@ def generate_with_ace_step(
         "suggested_by": "quality_rank_only" if suggested else None,
         "quality": (selected or suggested or candidates_payload[0])["quality"],
         "candidates": candidates_payload,
+        "ace_preflight": (analysis or {}).get("ace_preflight"),
         "metadata": {
             "bpm": payload.get("bpm"),
             "key_scale": payload.get("key_scale"),
             "time_signature": payload.get("time_signature"),
-            "instrumental": True,
+            "instrumental": payload.get("instrumental"),
             "task_type": payload.get("task_type"),
             "reference_similarity": payload.get("reference_similarity"),
+            "requested_reference_similarity": payload.get("requested_reference_similarity"),
             "difference_level": payload.get("difference_level"),
             "audio_cover_strength": payload.get("audio_cover_strength"),
             "cover_noise_strength": payload.get("cover_noise_strength"),
+            "ace_suitability": (analysis or {}).get("ace_preflight"),
         },
         "limitations": [
             "Reference-guided original variation; cover mode controls source conditioning but still requires listening review.",
@@ -142,17 +145,22 @@ def _build_payload(
     key_scale = _key_scale(analysis)
     caption = _caption(prompt, analysis)
     transform = analysis.get("reference_transform") or {}
-    groove_similarity = _groove_similarity(transform)
-    task_type = os.environ.get("PROMPT2MIDI_ACE_STEP_TASK_TYPE") or _task_type(transform, groove_similarity)
+    requested_similarity = _groove_similarity(transform)
+    effective_similarity = _effective_similarity(transform, requested_similarity)
+    task_type = os.environ.get("PROMPT2MIDI_ACE_STEP_TASK_TYPE") or _task_type(transform, effective_similarity)
     is_cover = task_type in {"cover", "cover-nofsq"}
-    conditioning = _source_conditioning(transform, groove_similarity, is_cover)
+    conditioning = _source_conditioning(transform, effective_similarity, is_cover)
     reference_path = os.path.abspath(reference_audio)
+    vocal = _vocal_transform(transform, analysis)
+    direct_vocal = _uses_direct_vocal(vocal)
+    instrumental = not direct_vocal
+    reference_audio_path = reference_path if is_cover else None
     return {
         "task_type": task_type,
         "prompt": caption,
-        "lyrics": "[Instrumental]",
-        "instrumental": True,
-        "reference_audio_path": reference_path,
+        "lyrics": _lyrics_for_vocal(vocal),
+        "instrumental": instrumental,
+        "reference_audio_path": reference_audio_path,
         "src_audio_path": reference_path if is_cover else None,
         "audio_duration": float(duration_seconds),
         "duration": float(duration_seconds),
@@ -181,14 +189,9 @@ def _build_payload(
         "cover_noise_strength": float(
             os.environ.get("PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH") or conditioning["cover_noise_strength"]
         ),
-        "lm_negative_prompt": (
-            "atonal high pitched artifacts, alien glitches, sci-fi lasers, metallic chirps, "
-            "cartoon toy instruments, chipmunk sounds, harsh squeals, random melodies, "
-            "busy lead solo, lead vocals, lyrical singing, copied hook, distorted clipping, soft lounge house, "
-            "pretty pop melody, weak kick, thin bass, exact original bass pitch sequence, "
-            "copied bassline notes, original stab timbre, copied stab sample"
-        ),
-        "reference_similarity": groove_similarity,
+        "lm_negative_prompt": _negative_prompt(vocal),
+        "reference_similarity": effective_similarity,
+        "requested_reference_similarity": requested_similarity,
         "difference_level": transform.get("difference_level"),
     }
 
@@ -201,17 +204,41 @@ def _caption(prompt: str, analysis: dict) -> str:
     groove = analysis.get("groove") or {}
     groove_text = groove.get("feel") or groove.get("label") or ""
     transform = analysis.get("reference_transform") or {}
+    vocal = _vocal_transform(transform, analysis)
+    harmonic = _harmonic_transform(transform, analysis)
+    harmonic_guard = _harmonic_guard_text(harmonic)
+    character_guard = _reference_character_text(transform)
     style = transform.get("style") or {}
     style_brief = transform.get("style_brief") or style.get("brief") or genre.get("primary") or "reference-informed instrumental"
-    base = (user or f"original instrumental inspired by {style_brief}").rstrip(" .;")
+    direct_vocal = _uses_direct_vocal(vocal)
+    track_kind = "track" if direct_vocal else "instrumental guide track"
+    base = (user or f"original {track_kind} inspired by {style_brief}").rstrip(" .;")
+    bass_guard = _bass_guard_text(transform)
+    if ((transform or {}).get("bass") or {}).get("preserve_sound_design") and "bass lock:" not in base.lower():
+        base = f"{bass_guard}. {base}"
     style_line = (
         "use the reference for tempo, groove pocket, energy, and arrangement feel"
         if user
-        else f"original instrumental in the detected reference style: {style_brief}"
+        else f"original {track_kind} in the detected reference style: {style_brief}"
     )
+    if direct_vocal:
+        end_guard = (
+        f"clean club mix, new {vocal.get('role', 'vocal hook')} role with original words and voice, "
+        "no copied vocal identity, no exact lyric phrase, no lead solo, no alien glitch sounds"
+        )
+    elif vocal.get("preserve_role"):
+        end_guard = (
+            f"clean club mix, translate the {vocal.get('role', 'vocal hook')} role into a stable synth/keyboard/non-lyrical chop hook, "
+            "no lead vocal, no lyrical singing, no stretched vocal artifacts, no alien glitch sounds"
+        )
+    else:
+        end_guard = "clean club mix, no lead vocal or lyrical singing, no lead solo, no alien glitch sounds"
     additions = [
         style_line,
+        character_guard,
+        harmonic_guard,
         "same tempo and key area as the reference",
+        bass_guard,
         "clear bassline groove",
         "tight rhythmic drums",
         "syncopated percussion feel",
@@ -219,14 +246,134 @@ def _caption(prompt: str, analysis: dict) -> str:
         "short rhythmic stabs or accent hits when appropriate",
         "micro-percussion movement and short vocal-like rhythmic chops when they are part of the reference style",
         "professional conventional instrument timbres",
-        "clean club mix, no lead vocal or lyrical singing, no lead solo, no alien glitch sounds",
+        end_guard,
     ]
+    if direct_vocal:
+        additions.insert(
+            4,
+            f"preserve the reference's {vocal.get('role', 'vocal hook')} function with a new melody contour",
+        )
+    elif vocal.get("preserve_role"):
+        additions.insert(
+            4,
+            f"preserve the reference's {vocal.get('role', 'vocal hook')} function as a clean instrumental hook proxy",
+        )
     if genre_text:
         additions.insert(1, f"genre tags: {genre_text}")
     if groove_text:
         additions.insert(2, f"groove feel: {groove_text}")
     caption = f"{base}. " + ". ".join(additions)
-    return _sentence_limited(caption, 1100)
+    return _sentence_limited(caption, 1300)
+
+
+def _vocal_transform(transform: dict, analysis: dict | None = None) -> dict:
+    if os.environ.get("PROMPT2MIDI_ACE_STEP_FORCE_INSTRUMENTAL") == "1":
+        return {}
+    if os.environ.get("PROMPT2MIDI_ACE_STEP_FORCE_VOCALS") == "1":
+        analysis_vocal = (analysis or {}).get("vocals") or {}
+        role = analysis_vocal.get("role") or ((transform or {}).get("vocals") or {}).get("role") or "vocal hook"
+        return {
+            "present": True,
+            "preserve_role": True,
+            "render_mode": "direct_vocal_hook",
+            "role": role if role != "none" else "vocal hook",
+            "description": (
+                "force a new original vocal hook: new words, new voice, changed melody contour, "
+                "same reference attitude and placement"
+            ),
+            "confidence": analysis_vocal.get("confidence") or 0.0,
+            "source": analysis_vocal.get("source") or "user_override",
+        }
+    vocal = (transform or {}).get("vocals") or {}
+    if vocal.get("preserve_role"):
+        return vocal
+    analysis_vocal = (analysis or {}).get("vocals") or {}
+    if analysis_vocal.get("present"):
+        return {
+            "preserve_role": True,
+            "role": analysis_vocal.get("role") or "vocal hook",
+        }
+    return {}
+
+
+def _uses_direct_vocal(vocal: dict) -> bool:
+    return bool(vocal.get("preserve_role")) and vocal.get("render_mode") != "instrumental_hook_proxy"
+
+
+def _harmonic_transform(transform: dict, analysis: dict | None = None) -> dict:
+    harmonic = (transform or {}).get("harmonic") or {}
+    if isinstance(harmonic, dict) and harmonic:
+        return harmonic
+    key = str((analysis or {}).get("key") or "").strip()
+    if key and key.lower() != "unknown":
+        return {"key": key, "strict_scale": True}
+    return {"key": "unknown", "strict_scale": False}
+
+
+def _harmonic_guard_text(harmonic: dict) -> str:
+    key = harmonic.get("key")
+    if harmonic.get("strict_scale") and key and str(key).lower() != "unknown":
+        return (
+            f"scale-aware inside {key} for bass notes, vocal hook, synth melody, chord stabs, and fills; "
+            "resolved borrowed/chromatic tones are allowed only when they fit the reference harmony; "
+            "no clashing off-scale wrong notes"
+        )
+    return (
+        "keep bass, vocal hook, synth melody, chord stabs, and fills tonal, resolved, and scale-aware; "
+        "no random chromatic wrong notes"
+    )
+
+
+def _reference_character_text(transform: dict) -> str:
+    character = (transform or {}).get("reference_character") or {}
+    prompt = str(character.get("prompt") or "").strip()
+    if not prompt:
+        return "preserve the reference mood, energy, low-end confidence, and hook attitude"
+    return prompt
+
+
+def _bass_guard_text(transform: dict) -> str:
+    bass = (transform or {}).get("bass") or {}
+    if bass.get("preserve_sound_design"):
+        return (
+            "bass lock: keep the reference bassline rhythm, note lengths, rests, steady bass tone, envelope, and low-end weight; "
+            "change only the bass pitch notes; no glitchy bass, choppy bass, stuttered bass, jumpy bass edits, or broken breakbeat bass"
+        )
+    return "steady non-glitchy bassline pocket with intentional note choices"
+
+
+def _lyrics_for_vocal(vocal: dict) -> str:
+    if not _uses_direct_vocal(vocal):
+        return "[Instrumental]"
+    role = str(vocal.get("role") or "vocal hook")
+    if "lead" in role:
+        return (
+            "[Verse]\n"
+            "new original short vocal phrases, confident electronic club attitude\n"
+            "[Chorus]\n"
+            "new memorable vocal hook, original words, new voice, changed melody"
+        )
+    return "[Vocal Hook]\nnew rhythmic vocal chops and short original phrases, no copied words"
+
+
+def _negative_prompt(vocal: dict) -> str:
+    common = (
+        "atonal high pitched artifacts, alien glitches, sci-fi lasers, metallic chirps, "
+        "cartoon toy instruments, chipmunk sounds, harsh squeals, random melodies, "
+        "off-key bass notes, out-of-scale lead notes, unresolved chromatic melody, clashing wrong notes, "
+        "dissonant random pitch, "
+        "stretched vocal chops, warped vocal transitions, squeezed formants, smeared transition notes, "
+        "busy lead solo, distorted clipping, soft lounge house, pretty pop melody, weak kick, thin bass, "
+        "glitchy bass, choppy bass, stuttered bass, jumpy bass edits, broken breakbeat bass, random bass cuts, "
+        "unusable experimental noises, non-musical output, exact original bass pitch sequence, copied bassline notes, "
+        "original stab timbre, copied stab sample"
+    )
+    if _uses_direct_vocal(vocal):
+        return (
+            common
+            + ", copied hook, copied lyrics, copied vocal identity, impersonation, off-key vocals, robotic alien voice"
+        )
+    return common + ", lead vocals, lyrical singing, copied hook, copied vocal identity"
 
 
 def _sentence_limited(text: str, limit: int) -> str:
@@ -248,11 +395,25 @@ def _groove_similarity(transform: dict) -> float:
         return 0.0
 
 
+def _effective_similarity(transform: dict, fallback: float | None = None) -> float:
+    controls = (((transform or {}).get("ace_preflight") or {}).get("hidden_controls") or {})
+    try:
+        value = float(controls.get("recommended_similarity"))
+    except (TypeError, ValueError):
+        value = fallback if fallback is not None else _groove_similarity(transform)
+    return max(0.0, min(1.0, float(value or 0.0)))
+
+
 def _task_type(transform: dict, groove_similarity: float) -> str:
+    route = (((transform or {}).get("ace_preflight") or {}).get("hidden_controls") or {}).get("route")
+    if route == "analysis_text_conditioned":
+        return "text2music"
     profile = transform.get("similarity_profile") or {}
     profile_task = profile.get("ace_task_type")
     if profile_task:
         return str(profile_task)
+    if profile:
+        return "cover"
     bass = transform.get("bass") or {}
     if groove_similarity >= 0.96 and not bass.get("vary_notes"):
         return "cover"
@@ -263,16 +424,30 @@ def _task_type(transform: dict, groove_similarity: float) -> str:
 
 def _source_conditioning(transform: dict, groove_similarity: float, is_cover: bool) -> dict:
     profile = transform.get("similarity_profile") or {}
+    controls = (((transform or {}).get("ace_preflight") or {}).get("hidden_controls") or {})
+    env_reference_strength = os.environ.get("PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH")
+    env_noise_strength = os.environ.get("PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH")
     if not is_cover:
         return {
-            "reference_strength": str(round(float(profile.get("audio_cover_strength") or 0.0), 3)),
-            "cover_noise_strength": "0.0",
+            "reference_strength": str(round(float(env_reference_strength or controls.get("reference_strength") or profile.get("audio_cover_strength") or 0.0), 3)),
+            "cover_noise_strength": str(round(float(env_noise_strength or controls.get("cover_noise_strength") or 0.0), 3)),
+        }
+
+    if controls and not (env_reference_strength or env_noise_strength):
+        return {
+            "reference_strength": str(round(max(0.0, min(1.0, float(controls.get("reference_strength") or 0.0))), 3)),
+            "cover_noise_strength": str(round(max(0.0, min(1.0, float(controls.get("cover_noise_strength") or 0.0))), 3)),
         }
 
     if "audio_cover_strength" in profile or "cover_noise_strength" in profile:
+        reference_strength = max(0.0, min(1.0, float(profile.get("audio_cover_strength") or 0.0)))
+        cover_noise_strength = max(0.0, min(1.0, float(profile.get("cover_noise_strength") or 0.0)))
+        if _rich_reference_safe_mode(transform, groove_similarity):
+            reference_strength = max(reference_strength, 0.26)
+            cover_noise_strength = max(cover_noise_strength, 0.1)
         return {
-            "reference_strength": str(round(max(0.0, min(1.0, float(profile.get("audio_cover_strength") or 0.0))), 3)),
-            "cover_noise_strength": str(round(max(0.0, min(1.0, float(profile.get("cover_noise_strength") or 0.0))), 3)),
+            "reference_strength": str(round(float(env_reference_strength or reference_strength), 3)),
+            "cover_noise_strength": str(round(float(env_noise_strength or cover_noise_strength), 3)),
         }
 
     bass = transform.get("bass") or {}
@@ -284,13 +459,31 @@ def _source_conditioning(transform: dict, groove_similarity: float, is_cover: bo
         cover_noise_strength = 0.96
     else:
         difference = max(0.0, 1.0 - groove_similarity, variation if vary_notes else 0.0)
-        reference_strength = 0.46 + groove_similarity * 0.35 - difference * 0.15
-        cover_noise_strength = 0.12 + max(0.0, groove_similarity - 0.75) * 0.9 - difference * 0.08
+        if groove_similarity < 0.4:
+            reference_strength = 0.22 + groove_similarity * 0.18
+            cover_noise_strength = 0.12 + groove_similarity * 0.15
+        elif groove_similarity < 0.75:
+            reference_strength = 0.18 + groove_similarity * 0.25 - difference * 0.04
+            cover_noise_strength = 0.08 + groove_similarity * 0.16 - difference * 0.03
+        else:
+            reference_strength = 0.46 + groove_similarity * 0.35 - difference * 0.15
+            cover_noise_strength = 0.12 + max(0.0, groove_similarity - 0.75) * 0.9 - difference * 0.08
+
+    min_reference_strength = 0.2 if groove_similarity < 0.4 else 0.18 if groove_similarity < 0.75 else 0.55
+    min_cover_noise_strength = 0.1 if groove_similarity < 0.4 else 0.07 if groove_similarity < 0.75 else 0.14
 
     return {
-        "reference_strength": str(round(max(0.68, min(0.98, reference_strength)), 3)),
-        "cover_noise_strength": str(round(max(0.14, min(0.96, cover_noise_strength)), 3)),
+        "reference_strength": str(round(max(min_reference_strength, min(0.98, reference_strength)), 3)),
+        "cover_noise_strength": str(round(max(min_cover_noise_strength, min(0.96, cover_noise_strength)), 3)),
     }
+
+
+def _rich_reference_safe_mode(transform: dict, groove_similarity: float) -> bool:
+    rich_reference = (transform or {}).get("rich_reference") or {}
+    vocal = (transform or {}).get("vocals") or {}
+    return bool(rich_reference.get("enabled")) or (
+        groove_similarity <= 0.35 and vocal.get("render_mode") == "instrumental_hook_proxy"
+    )
 
 
 def _lock_value(value: object, fallback: float) -> float:
@@ -309,7 +502,9 @@ def _bpm(analysis: dict) -> int:
 
 
 def _key_scale(analysis: dict) -> str:
-    key = str(analysis.get("key") or "").strip()
+    transform = analysis.get("reference_transform") or {}
+    harmonic = (transform or {}).get("harmonic") or {}
+    key = str(harmonic.get("key") or analysis.get("key") or "").strip()
     if not key or key.lower() == "unknown":
         return ""
     parts = key.replace("minor", "Minor").replace("major", "Major").split()
@@ -319,10 +514,19 @@ def _key_scale(analysis: dict) -> str:
 
 
 def _health_check(base_url: str) -> None:
-    try:
-        _request_json("GET", f"{base_url}/health")
-    except Exception as exc:
-        raise RuntimeError(f"ACE-Step API is not reachable at {base_url}. Start it with `npm run ace-step:start`.") from exc
+    deadline = time.time() + float(os.environ.get("PROMPT2MIDI_ACE_STEP_HEALTH_TIMEOUT") or "90")
+    timeout = float(os.environ.get("PROMPT2MIDI_ACE_STEP_HEALTH_HTTP_TIMEOUT") or "10")
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            request = urllib.request.Request(f"{base_url}/health", method="GET")
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                json.loads(response.read().decode("utf-8"))
+            return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(3.0)
+    raise RuntimeError(f"ACE-Step API is not reachable at {base_url}. Start it with `npm run ace-step:start`.") from last_error
 
 
 def _submit_task(base_url: str, payload: dict) -> str:
@@ -367,7 +571,8 @@ def _poll_task(base_url: str, task_id: str) -> list[dict]:
 def _download_candidates(base_url: str, results: list[dict], output_dir: str, target_duration: float, analysis: dict) -> list[dict]:
     candidates: list[dict] = []
     reference_groove = analysis.get("reference_groove") or {}
-    target_similarity = _groove_similarity(analysis.get("reference_transform") or {})
+    transform = analysis.get("reference_transform") or {}
+    target_similarity = _effective_similarity(transform, _groove_similarity(transform))
     bpm = analysis.get("bpm")
     for index, item in enumerate(results, start=1):
         file_url = item.get("file") or item.get("audio") or item.get("path")
@@ -385,6 +590,7 @@ def _download_candidates(base_url: str, results: list[dict], output_dir: str, ta
                 exact_similarity_score=similarity["score"],
                 target_similarity=target_similarity,
             )
+        _apply_level_quality_gate(quality, target_similarity)
         candidates.append(
             {
                 "path": output_path,
@@ -422,8 +628,15 @@ def _choose_candidate(candidates: list[dict]) -> tuple[dict, str]:
 def _suggest_candidate(candidates: list[dict]) -> dict:
     return max(
         candidates,
-        key=lambda item: item["quality"].get("selection_score", item["quality"]["score"]),
+        key=_candidate_rank_key,
     )
+
+
+def _candidate_rank_key(item: dict) -> tuple[int, float]:
+    quality = item.get("quality") or {}
+    gate = quality.get("level_gate") or {}
+    gate_passed = 0 if gate.get("passed") is False else 1
+    return gate_passed, float(quality.get("selection_score", quality.get("score", 0.0)) or 0.0)
 
 
 def _selection_score(quality_score: float, exact_similarity_score: float, target_similarity: float) -> float:
@@ -440,6 +653,39 @@ def _selection_score(quality_score: float, exact_similarity_score: float, target
 
     target_fit = max(0.0, 1.0 - abs(exact_similarity_score - target_similarity) / 0.45)
     return round(0.70 * quality_score + 0.30 * target_fit, 3)
+
+
+def _apply_level_quality_gate(quality: dict, target_similarity: float) -> dict:
+    target_similarity = max(0.0, min(1.0, float(target_similarity or 0.0)))
+    pulse = float(quality.get("pulse_score") or 0.0)
+    timbre = float(quality.get("timbre_score") or 0.0)
+    score = float(quality.get("score") or 0.0)
+    warnings = quality.setdefault("warnings", [])
+    failures: list[str] = []
+
+    if target_similarity <= 0.35:
+        if pulse < 0.50:
+            failures.append("club pulse is too weak for low-similarity house output")
+        if score < 0.68:
+            failures.append("overall musical quality is below the low-similarity floor")
+        if timbre < 0.50:
+            failures.append("instrument/timbre stability is below the low-similarity floor")
+    elif target_similarity <= 0.55:
+        if pulse < 0.45:
+            failures.append("club pulse is too weak for reference-inspired output")
+        if score < 0.60:
+            failures.append("overall musical quality is below the reference-inspired floor")
+
+    quality["level_gate"] = {
+        "passed": not failures,
+        "target_similarity": round(target_similarity, 3),
+        "failures": failures,
+    }
+    if failures:
+        gate_warning = "Level quality gate failed: " + "; ".join(failures) + "."
+        if gate_warning not in warnings:
+            warnings.append(gate_warning)
+    return quality
 
 
 def _request_json(method: str, url: str, payload: dict | None = None) -> dict:
@@ -528,7 +774,7 @@ def _progress(message: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate a 30-second sample with ACE-Step.")
+    parser = argparse.ArgumentParser(description="Generate a reference-inspired sample with ACE-Step.")
     parser.add_argument("--reference", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--prompt", default="")
