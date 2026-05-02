@@ -45,32 +45,32 @@ closure_approved: false
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
 - **Last updated:** 2026-05-01 by danilulmashev
-- **What just happened:** Tightened Suno proxy lane for copyright-safe MJ-style testing: added reference section controls to proxy/reference runners, made proxy runner default to early-character selection, fixed audio_generation so env/CLI section strategy is honored, generated v5 from MJ-testing.m4a with explicit 8s section and forced vocal-hook ACE mode, packaged candidate 4 for Suno.
+- **What just happened:** Reran last-best ACE MJ proxy approach with prompt-order fix; produced four 30s candidates in tmp/mj-inspired-proxy-best-rerun-v1 and packaged candidate 2 for Suno. Also researched ElevenLabs Music API via agent.
 - **Current focus:** —
-- **Next action:** User should audition tmp/mj-inspired-proxy-v5-start8-vocal-hook candidates and Suno package; if vocal-hook ACE output is unstable, keep ACE for groove/instrumental proxies and route vocal-rich pop/funk references to a different generator or section-by-section proxy strategy.
+- **Next action:** User auditions candidates; decide whether to refine ACE prompt/profile or test ElevenLabs text-to-music API as a non-local paid option.
 - **Blockers:** none
 
 ## Progress log
 
-2026-05-01 14:42 — Tightened Suno proxy lane for copyright-safe MJ-style testing: added reference section controls to proxy/reference runners, made proxy runner default to early-character selection, fixed audio_generation so env/CLI section strategy is honored, generated v5 from MJ-testing.m4a with explicit 8s section and forced vocal-hook ACE mode, packaged candidate 4 for Suno.
+2026-05-01 21:01 — Reran last-best ACE MJ proxy approach with prompt-order fix; produced four 30s candidates in tmp/mj-inspired-proxy-best-rerun-v1 and packaged candidate 2 for Suno. Also researched ElevenLabs Music API via agent.
 
-2026-05-01 13:33 — Adjusted copyright-safe Suno proxy boundary from user feedback: Suno prompt is now compact under 1000 chars and asks Suno to preserve/polish the generated proxy, not invent missing layers. Updated proxy-run ACE default prompt to request a complete full-arrangement proxy with drums, bass, percussion, synth stabs, layered keys, comping, hits, transitions, and optional stable original vocal phrases; no longer forces instrumental unless --instrumental is passed.
+2026-05-01 20:31 — Ran 15s ACE MJ rhythm/bass test from MJ-testing reference section at 8s. First run exposed a prompt-order bug where user production detail was buried/truncated behind analysis text; patched audio_generation._condition_prompt to keep user direction before groove fingerprint. Reran corrected ACE test under tmp/ace-mj-15s-rhythm-bass-test-v2-prompt-lock/exports; candidate 1 passed level gate and candidate 2 failed quality floor. Stopped ACE API.
 
-2026-05-01 13:22 — Corrected Suno workflow around copyright-safe proxy demos: added suno_proxy_package.py, npm run suno:proxy, npm run suno:proxy-run. The new lane analyzes the source reference locally, generates ACE proxy candidates, refuses to package the original reference as proxy audio, and writes Suno upload artifacts only from generated proxy audio. Ran MJ-testing.m4a proxy test; generated 4 ACE candidates and packaged candidate 3 under tmp/mj-inspired-proxy-v1/suno-proxy-package.
+2026-05-01 19:55 — User rejected v5 clean bass-proxy/scaffold path because ace-control-scaffold.wav sounded chaotic/not tempo-key locked. Patched ACE pipeline so bass-proxy is diagnostic-only, skipped automatically for rich/vocal references unless PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY=1, and scaffold files are labeled internal/non-listenable.
 
-2026-05-01 12:52 — Added fast Suno Cover prep lane: local reference analysis, best 30s audio seed extraction, Suno prompt/report/instructions/manifest output, npm run suno:prepare wrapper, and focused unit test. Verified on MJ-testing.m4a into tmp/suno-mj-testing-v3.
+2026-05-01 19:36 — User feedback on v4: bass notes changed but bass tone sounded gross/unstable like puking, not a professional groove. Patched bass-proxy source so the control scaffold uses a clean rounded bass guide voice for ACE conditioning, lowered guide level in proxy mix, added prompt guard against gurgling/growling/wobbling bass artifacts, and generated v5 2x15s candidates under tmp/mj-bass-calibration-15s-v5-clean-bass-proxy/exports. Stopped ACE API.
 
-2026-05-01 10:05 — Disabled automatic ACE control-scaffold routing after listening feedback showed scaffold-conditioned ACE output was unusable; scaffold remains explicit-only behind --control-scaffold while normal bass-lock prompts return to real-reference ACE conditioning.
+2026-05-01 19:22 — User rejected v2 because all candidates still copied original MJ bass notes. Added --bass-proxy-source mode: ACE conditioning now can use high-passed real reference percussion/upper energy plus generated in-key replacement bass guide, so raw original bass pitch is removed before ACE hears it. Pure scaffold source timed out; bass-proxy source completed 2x15s candidates under tmp/mj-bass-calibration-15s-v4-bass-proxy-source/exports. Global harmonic guard remains in place.
 
-2026-05-01 09:40 — Added ACE control-scaffold conditioning path: pipeline renders an in-key bass/drum scaffold from analysis/groove and can route bass-lock prompts through it before ACE; generated Tiga 15s validation run at tmp/tiga-control-scaffold-v1-15s.
+2026-05-01 17:48 — Generated MJ 15s v2 different-bass-notes ACE calibration at tmp/mj-bass-calibration-15s-v2-different-notes/exports; recorded user feedback that v1 candidates 1 and 2 had the right percussion/bass presence and MJ spirit but copied bass pitch notes; patched global harmonic guard so ACE prompts require in-key, tonal, resolved bass/hooks/stabs/fills/effects and forbid out-of-tune/off-key artifacts.
 
-2026-05-01 09:18 — Added safe FFT reference groove extraction for fast ACE lane, concrete bass/kick/hat grid prompting, chord-root key correction for ACE payloads, and generated Tiga bass-lock v3 grid/key validation candidates.
+2026-05-01 17:33 — Ran 15s one-passage ACE calibration from original local MJ reference WAV at 8s, focused on capturing both drum rhythm/percussion and audible melodic/rhythmic bassline in the initial generation. Produced 4 candidates under tmp/mj-bass-calibration-15s-v1/exports and stopped ACE.
 
-2026-05-01 08:54 — Added bass rhythm/sound lock intent for ACE: detects same bass rhythm/sound with different notes, strengthens source conditioning, preserves bass tone/rhythm, moves bass-lock guard to front of ACE prompt, expands anti-glitch bass negatives, and generated Tiga bass-lock v1/v2 validation batches.
+2026-05-01 17:24 — Deleted failed bass refinement outputs and reran v8 liked candidates 1-3 through ACE with source-conditioned high profile, lower source lock, higher noise, and explicit significantly audible bass instruction. Generated two variants per source candidate under ace-refine-bass-v3 and stopped ACE API.
 
-2026-05-01 08:20 — Added ACE preflight suitability/router with hidden controls, prompt-directed similarity, very-high profile, early ace-preflight export, effective similarity metadata, vocal-aware ACE payloads, and generated a Tiga prompt-directed validation batch.
+2026-05-01 17:02 — Refined v8 liked candidates 1-3 through ACE itself after rejecting synthetic bass overlay approach. Generated two ACE bass-refinement variants per source candidate under ace-refine-bass, stopped local ACE API, and recorded feedback rule: no random post-generated musical notes.
 
-2026-04-30 23:30 — Generated Tiga near-identical vocal fast ACE run, 30s, 4 candidates at tmp/tiga-fast-near-identical-vocal-v1-30s/exports; candidate 3 suggested though all candidates have timbre/noisy warnings
+2026-05-01 16:43 — Recorded v8 feedback: user liked candidates 1-3 drum/percussion layers, rejected candidate 4, and identified missing bassline as the blocker. Added reusable bassline_overlay refinement and exported bass-forward-v2 versions plus Suno packages for candidates 1-3.
 
 ## Open questions
 

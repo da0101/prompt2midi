@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 from ace_step_generation import generate_with_ace_step
@@ -55,7 +57,48 @@ def generate_reference_sample(
     conditioned_prompt = _condition_prompt(prompt, reference_groove, analysis_with_groove.get("reference_transform"))
     ace_reference_audio = section["path"]
     control_scaffold = None
-    if _should_use_control_scaffold(transform, prompt):
+    if _should_use_bass_proxy_reference(transform, prompt):
+        if _should_skip_bass_proxy_reference(transform):
+            attempts.append(
+                {
+                    "provider": "bass_proxy_reference",
+                    "status": "skipped",
+                    "message": (
+                        "Bass-proxy conditioning is disabled for rich/vocal references because the generated "
+                        "bass scaffold can contaminate ACE with unstable timing or unmusical pitch movement. "
+                        "Set PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY=1 to force this diagnostic route."
+                    ),
+                }
+            )
+        else:
+            try:
+                from structured_render import render_control_scaffold
+
+                internal_dir = os.path.join(output_dir, "_internal")
+                control_scaffold = render_control_scaffold(
+                    reference_path=section["path"],
+                    output_dir=internal_dir,
+                    prompt=prompt,
+                    analysis=analysis_with_groove,
+                    reference_groove=reference_groove,
+                    duration_seconds=duration_seconds,
+                )
+                ace_reference_audio = _build_bass_proxy_reference(
+                    section_path=section["path"],
+                    scaffold_path=control_scaffold["path"],
+                    output_dir=internal_dir,
+                )
+                analysis_with_groove["control_scaffold"] = control_scaffold
+                analysis_with_groove["bass_proxy_reference"] = {
+                    "path": ace_reference_audio,
+                    "method": "highpassed_real_reference_plus_generated_in_key_bass_guide",
+                    "purpose": "Preserve percussion/energy while removing original bass pitch notes from ACE conditioning.",
+                    "diagnostic_only": True,
+                }
+                conditioned_prompt = _bass_proxy_reference_direction() + " " + conditioned_prompt
+            except Exception as exc:
+                attempts.append({"provider": "bass_proxy_reference", "status": "failed", "message": str(exc)})
+    elif _should_use_control_scaffold(transform, prompt):
         try:
             from structured_render import render_control_scaffold
 
@@ -174,6 +217,63 @@ def _should_use_control_scaffold(reference_transform: dict, prompt: str) -> bool
     return False
 
 
+def _should_use_bass_proxy_reference(reference_transform: dict, prompt: str) -> bool:
+    return os.environ.get("PROMPT2MIDI_ACE_STEP_BASS_PROXY_REFERENCE") == "1"
+
+
+def _should_skip_bass_proxy_reference(reference_transform: dict) -> bool:
+    if os.environ.get("PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY") == "1":
+        return False
+    vocal = (reference_transform or {}).get("vocals") or {}
+    rich = (reference_transform or {}).get("rich_reference") or {}
+    return bool(vocal.get("preserve_role") or rich.get("enabled"))
+
+
+def _build_bass_proxy_reference(section_path: str, scaffold_path: str, output_dir: str) -> str:
+    """Make diagnostic ACE conditioning audio with real percussion but without original bass pitches."""
+    ffmpeg = os.environ.get("PROMPT2MIDI_FFMPEG") or shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg is required to build the bass-proxy ACE reference.")
+    output_path = os.path.abspath(os.path.join(output_dir, "ace-bass-proxy-reference.wav"))
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            section_path,
+            "-i",
+            scaffold_path,
+            "-filter_complex",
+            (
+                "[0:a]highpass=f=205,volume=0.9[real_hi];"
+                "[1:a]lowpass=f=190,volume=0.52[bass_guide];"
+                "[real_hi][bass_guide]amix=inputs=2:duration=first:normalize=0,"
+                "alimiter=limit=0.92"
+            ),
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            output_path,
+        ],
+        check=True,
+    )
+    return output_path
+
+
+def _bass_proxy_reference_direction() -> str:
+    return (
+        "ACE source note: the attached cover source is an experimental diagnostic bass-proxy guide, not the original recording; "
+        "its upper percussion/energy comes from the reference while the low bass guide uses new in-key notes. "
+        "Follow the bass rhythm, envelope, punch, rests, and low-end role from this proxy, not the original bass melody; "
+        "do not recreate the original bass pitch sequence. Use a clean, rounded, professional funk bass tone; "
+        "no sick/gurgling/growling/wobbling bass artifacts. "
+    )
+
+
 def _control_scaffold_direction() -> str:
     return (
         "Use the attached generated control scaffold as the hard rhythm and bass reference: "
@@ -187,16 +287,16 @@ def _condition_prompt(prompt: str, reference_groove: dict, reference_transform: 
     bass_lock = _bass_lock_direction(reference_transform or {})
     if bass_lock:
         parts.append(bass_lock)
-    groove_prompt = _groove_prompt_for_transform(reference_groove or {}, reference_transform or {})
-    if groove_prompt:
-        parts.append(groove_prompt)
-    base = _model_prompt_for_transform(prompt, reference_transform or {})
-    if base:
-        parts.append(base)
     harmonic = _harmonic_transform(reference_transform or {})
     harmonic_prompt = _harmonic_direction(harmonic).strip()
     if harmonic_prompt:
         parts.append(harmonic_prompt)
+    base = _model_prompt_for_transform(prompt, reference_transform or {})
+    if base:
+        parts.append(base)
+    groove_prompt = _groove_prompt_for_transform(reference_groove or {}, reference_transform or {})
+    if groove_prompt:
+        parts.append(groove_prompt)
     character_prompt = _reference_character_prompt(reference_transform or {})
     if character_prompt:
         parts.append(character_prompt)
@@ -357,10 +457,15 @@ def _harmonic_direction(harmonic: dict) -> str:
     key = harmonic.get("key")
     if harmonic.get("strict_scale") and key:
         return (
-            f"keep bassline, vocal hook, synth melody, and stabs scale-aware inside {key}; "
-            "allow only resolved chromatic or borrowed tones supported by the reference; avoid clashing off-scale notes; "
+            f"global harmonic rule: keep bassline, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
+            "allow only resolved borrowed or chromatic tones that are musically supported by the key area; "
+            "no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, or unresolved atonal artifacts; "
         )
-    return "keep all melodic and harmonic material tonal, resolved, and scale-aware; "
+    return (
+        "global harmonic rule: keep all bass, hooks, synth melodies, chord stabs, fills, risers, and effects tonal, "
+        "resolved, and scale-aware; no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, "
+        "or unresolved atonal artifacts; "
+    )
 
 
 def _reference_character_prompt(reference_transform: dict) -> str:

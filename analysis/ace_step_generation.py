@@ -314,13 +314,13 @@ def _harmonic_guard_text(harmonic: dict) -> str:
     key = harmonic.get("key")
     if harmonic.get("strict_scale") and key and str(key).lower() != "unknown":
         return (
-            f"scale-aware inside {key} for bass notes, vocal hook, synth melody, chord stabs, and fills; "
-            "resolved borrowed/chromatic tones are allowed only when they fit the reference harmony; "
-            "no clashing off-scale wrong notes"
+            f"global harmonic rule: keep bass notes, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
+            "resolved borrowed or chromatic tones are allowed only when they fit the key area and reference harmony; "
+            "no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, or unresolved atonal artifacts"
         )
     return (
-        "keep bass, vocal hook, synth melody, chord stabs, and fills tonal, resolved, and scale-aware; "
-        "no random chromatic wrong notes"
+        "global harmonic rule: keep bass, hook, synth melody, chord stabs, fills, risers, and effects tonal, resolved, and scale-aware; "
+        "no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, or unresolved atonal artifacts"
     )
 
 

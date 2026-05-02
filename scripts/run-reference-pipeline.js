@@ -60,6 +60,7 @@ async function main() {
   if (args.autoSelect) env.PROMPT2MIDI_ACE_STEP_AUTO_SELECT = '1';
   if (args.controlScaffold) env.PROMPT2MIDI_ACE_STEP_CONTROL_SCAFFOLD = '1';
   if (args.noControlScaffold) env.PROMPT2MIDI_DISABLE_CONTROL_SCAFFOLD = '1';
+  if (args.bassProxySource) env.PROMPT2MIDI_ACE_STEP_BASS_PROXY_REFERENCE = '1';
 
   const childArgs = [
     analyzeScript,
@@ -96,6 +97,7 @@ function parseArgs(argv) {
     else if (arg === '--instrumental') parsed.instrumental = true;
     else if (arg === '--control-scaffold') parsed.controlScaffold = true;
     else if (arg === '--no-control-scaffold') parsed.noControlScaffold = true;
+    else if (arg === '--bass-proxy-source') parsed.bassProxySource = true;
     else if (arg.startsWith('--')) {
       const key = toCamel(arg.slice(2));
       const value = argv[index + 1];
@@ -143,6 +145,7 @@ Options:
   --guidance <n>                ACE guidance scale.
   --control-scaffold            Generate an in-key bass/drum control scaffold and use it as ACE's cover reference.
   --no-control-scaffold         Disable automatic scaffold routing for bass-lock prompts.
+  --bass-proxy-source           Experimental diagnostic only. Uses high-passed reference + generated bass guide; automatically skipped for rich/vocal references unless PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY=1.
 
 Every audio run writes these full-song SUNO control artifacts under <output-dir>/exports:
   arrangement-map.json
