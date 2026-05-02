@@ -6,7 +6,84 @@ const { prepareAudioForAnalysis, validateAudioPath } = require('../backend/lib/a
 
 const repoRoot = path.resolve(__dirname, '..');
 const analyzeScript = path.join(repoRoot, 'analysis', 'analyze.py');
+const ANALYSIS_PYTHON = process.env.PROMPT2MIDI_ANALYSIS_PYTHON || 'python3';
 const LEVELS = new Set(['low', 'medium-low', 'medium', 'medium-high', 'high', 'very-high', 'near-identical', 'identical']);
+
+function makeProgressRenderer() {
+  const isTTY = Boolean(process.stderr.isTTY);
+  const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+  // ANSI helpers — empty strings when not a TTY so plain text still works
+  const C = isTTY
+    ? { reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
+        cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m',
+        red: '\x1b[31m', magenta: '\x1b[35m', blue: '\x1b[34m' }
+    : Object.fromEntries(['reset','bold','dim','cyan','green','yellow','red','magenta','blue'].map(k => [k, '']));
+
+  // Pick a color per step category based on keywords in the label
+  function stepColor(text) {
+    const t = text.toLowerCase();
+    if (/stem|demucs|vocal strip/.test(t)) return C.yellow;
+    if (/ace-step|ace step|generation|candidate/.test(t)) return C.green;
+    if (/midi|bass|groove|chord|melody/.test(t)) return C.magenta;
+    if (/instrument|production type/.test(t)) return C.blue;
+    return C.cyan;
+  }
+
+  let frame = 0;
+  let current = '';
+  let color = C.cyan;
+  let timer = null;
+
+  function clearLine() { process.stderr.write('\r\x1b[2K'); }
+
+  function tick() {
+    frame++;
+    process.stderr.write(`\r\x1b[2K${color}${FRAMES[frame % FRAMES.length]}${C.reset} ${current}`);
+  }
+
+  // Begin a new step — completes the previous one as ✓
+  function step(text) {
+    done(true);
+    current = text;
+    color = stepColor(text);
+    if (isTTY) {
+      tick();
+      timer = setInterval(tick, 80);
+    } else {
+      process.stderr.write(`  ◆ ${text}\n`);
+    }
+  }
+
+  // Mark the current step done (✓ green or ✗ red)
+  function done(success = true) {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (!current) return;
+    if (isTTY) {
+      const icon = success ? `${C.green}✓${C.reset}` : `${C.yellow}!${C.reset}`;
+      process.stderr.write(`\r\x1b[2K${icon} ${C.dim}${current}${C.reset}\n`);
+    }
+    current = '';
+  }
+
+  function warn(line) {
+    done(true);
+    process.stderr.write(`${C.yellow}  ⚠  ${line}${C.reset}\n`);
+  }
+
+  function error(line) {
+    done(false);
+    process.stderr.write(`${C.red}  ✗  ${line}${C.reset}\n`);
+  }
+
+  function other(line) {
+    done(true);
+    process.stderr.write(`     ${line}\n`);
+  }
+
+  return { step, done, warn, error, other };
+}
+
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -71,18 +148,73 @@ async function main() {
   if (prompt) childArgs.push('--user-prompt', prompt);
   if (fastSample) childArgs.push('--fast-sample');
 
+  const renderer = makeProgressRenderer();
+  const startTime = Date.now();
+  const startLabel = new Date(startTime).toLocaleTimeString();
+
+  const C = process.stderr.isTTY
+    ? { reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m', cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m' }
+    : Object.fromEntries(['reset','bold','dim','cyan','green','yellow'].map(k => [k, '']));
+
+  process.stderr.write(`${C.dim}started ${startLabel}${C.reset}\n`);
+
   return new Promise((resolve) => {
-    const child = spawn('python3', childArgs, {
+    const fs = require('node:fs');
+    const outputJsonPath = require('node:path').join(outputDir, 'run-output.json');
+    let stdoutBuf = '';
+
+    const child = spawn(ANALYSIS_PYTHON, childArgs, {
       cwd: repoRoot,
       env,
-      stdio: 'inherit',
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
+
+    // Collect stdout silently — write to run-output.json, never print to terminal
+    child.stdout.on('data', (chunk) => { stdoutBuf += chunk.toString(); });
+
+    let buf = '';
+    child.stderr.on('data', (chunk) => {
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (line.startsWith('progress: ')) {
+          renderer.step(line.slice('progress: '.length));
+        } else if (/^(warning|warn):/i.test(line)) {
+          renderer.warn(line);
+        } else if (/^(error|exception|traceback)/i.test(line)) {
+          renderer.error(line);
+        } else {
+          renderer.other(line);
+        }
+      }
+    });
+
     child.on('exit', (code, signal) => {
+      if (buf.trim()) renderer.other(buf);
+      renderer.done(code === 0);
+
+      // Write stdout JSON to file
+      if (stdoutBuf.trim()) {
+        try { fs.writeFileSync(outputJsonPath, stdoutBuf, 'utf8'); } catch (_) {}
+      }
+
+      // Timing summary
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const endLabel = new Date().toLocaleTimeString();
+      process.stderr.write(
+        `${C.dim}finished ${endLabel} — elapsed ${C.bold}${elapsed}s${C.reset}${C.dim} — output: ${outputDir}${C.reset}\n`
+      );
+
       if (signal) process.kill(process.pid, signal);
       process.exitCode = code || 0;
       resolve(process.exitCode);
     });
-    child.on('error', (error) => resolve(fail(error.message)));
+    child.on('error', (err) => {
+      renderer.done(false);
+      resolve(fail(err.message));
+    });
   });
 }
 

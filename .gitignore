@@ -51,6 +51,7 @@ pnpm-debug.log*
 # prompt2midi local runtime
 .cache/
 tmp/
+test/
 exports/
 gradio_outputs/
 *.log
