@@ -5,6 +5,10 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-05-05 — blocked stream audits — kept `gemini-suno-prompt-v1` blocked on real Gemini smoke and archived `deep-analysis-v1` as superseded — separate implemented code from verified product criteria.
+- 2026-05-05 — stream closures — archived accepted `full-arrangement-proxy-v1` and `inspired-loop-engine-v1` — fine-tuning should be tracked as fresh scoped work.
+- 2026-05-05 — Agentboard stream cleanup — moved listen-test log to memory, archived verified `analysis-ui-v1`, marked Gemini/deep analysis blocked, and reset inspired-loop next action — keep `.platform/work/` limited to real streams with current state.
+- 2026-05-05 — commit `a66e43d`: update — auto-logged
 - 2026-05-05 — commit `9609c41`: Record ACE UI pipeline commit — auto-logged
 - 2026-05-05 — commit `93cad39`: Add ACE inspired loop UI and proxy pipeline — auto-logged
 - 2026-05-03 — implementation: optional Gemini ACE brief lane — added Gemini smart-brief and experimental-control flags to the ACE proxy runner/UI; Gemini now pre-analyzes locally, writes `gemini-ace-brief.json`, appends a producer brief to ACE prompts, and can conservatively suggest ACE slider-equivalent controls when explicitly enabled.

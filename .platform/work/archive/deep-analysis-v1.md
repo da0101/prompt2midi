@@ -2,15 +2,15 @@
 stream_id: stream-deep-analysis-v1
 slug: deep-analysis-v1
 type: feature
-status: in-progress
+status: superseded
 agent_owner: claude-code
 domain_slugs: [audio-analysis, composition-engine]
 repo_ids: [repo-primary]
 base_branch: main
-git_branch: feature/analysis-ui-v1
+git_branch: feature/deep-analysis-v1
 created_at: 2026-04-28
-updated_at: 2026-04-28
-closure_approved: false
+updated_at: 2026-05-05
+closure_approved: true
 ---
 
 # deep-analysis-v1
@@ -37,11 +37,16 @@ closure_approved: false
 
 ## Resume state
 
-- **Last updated:** 2026-04-28 — claude-code
-- **Current focus:** Implementing 4 new modules in parallel
+- **Last updated:** 2026-05-05 — codex
+- **Current focus:** Closed as superseded.
+- **Next action:** If this capability still matters, open a fresh verification stream for real-audio checks: CLAP/cache behavior, chord fixture accuracy, drum-stem onset grids, structure segmentation, and composition deltas from detected chords/drums.
 - **Blockers:** none
 
 ## Progress log
+
+2026-05-05 — Parallel audit found code exists but original criteria were never verified as written; closed as superseded rather than done.
+
+2026-05-05 — Cleanup audit: stream is stale, not listed as a live focus in `BRIEF.md`, and all done criteria remain unchecked; marked blocked rather than falsely active.
 
 2026-04-28 — Stream registered, executing
 
@@ -53,4 +58,4 @@ _None._
 
 ## 🔍 Audit Report
 
-_Status: not yet run_
+2026-05-05 — Parallel audit: archive/close as superseded, not done. Implemented pieces exist: CLAP genre path with unavailable fallback, chroma/template chord detection, drum-stem onset grids, local structure segmentation, pipeline wiring, and composition use of detected chords/drums. Gaps: no MFCC genre fallback despite scope, no direct correctness tests for real CLAP/chords/drums/structure, Gemini receives compact selected analysis rather than the full bundle. If needed, reopen as a fresh verification stream.

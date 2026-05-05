@@ -4,35 +4,40 @@
 > 30-second orientation: what we're building, why, and where we stand.
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
-**Feature:** full-arrangement-proxy-v1
-**Status:** in-progress
-**Stream file:** `work/full-arrangement-proxy-v1.md`
+**Feature:** stream cleanup / blocked follow-ups
+**Status:** no active in-progress feature stream
+**Stream file:** `work/ACTIVE.md`
 
 ---
 
 ## What we're building
 
-Full-song reference-inspired proxy generation for SUNO. The workflow should analyze an entire reference track, detect the bar-aligned arrangement structure, generate original ACE proxy audio section by section, let the user audition candidates, then stitch/export a full-length guide and prompt package.
+No feature stream is currently in active execution. The previous `full-arrangement-proxy-v1` and `inspired-loop-engine-v1` streams were accepted by the owner and archived on 2026-05-05.
 
 ## Why
 
-The user wants SUNO to follow a known song arrangement instead of inventing cheesy or unrelated structure. A strong full-length proxy should preserve genre, BPM, key area, groove, energy curve, breaks, drops, hooks, silences, and section proportions while staying original and copyright-safe.
+The workflow state was cleaned up so future sessions do not resume completed work or mix fine-tuning tasks into already accepted streams.
 
 ## What done looks like
 
-- Full reference analysis produces a reliable `arrangement-map.json`, `analysis-report.md`, and `suno-structure-prompt.md`.
-- Full Arrangement mode cuts bar-aligned sections, generates ACE candidates per section, lets the user select/rerun sections, and stitches a full guide.
-- The existing 30-second ACE sample lane remains clean and unchanged for fast testing.
+- `ab doctor` passes.
+- `ACTIVE.md` lists only real open streams.
+- Completed streams stay in `work/archive/`.
+- New config fine-tuning work starts as a fresh, scoped stream.
 
 ## Architecture decisions locked
 
-- Use section-by-section full-song generation as the default; do not rely on one-shot ACE full-song rendering.
-- Use a bar-grid contract: every generated section has target start/end bars, role, energy, duration, and transition metadata.
-- MIDI/stem extraction is optional evidence/debug for this stream, not the main audio output path.
+- Completed streams should be archived instead of kept open for vague tuning.
+- `.platform/work/` should contain only active, blocked, or awaiting-verification stream files.
+- Supporting logs belong in `.platform/memory/`, not `.platform/work/`.
 
 ## Current state
 
-Phase 1 Arrangement Lock analysis is implemented: `arrangement-map.json` now includes blueprint fidelity, section transition metadata, lock confidence, and review gating; `arrangement-lock-report.json` and `structure-debug.json` are written beside the report/prompt. It is not yet product-ready because it still needs real-reference validation, section cutting, section audition, candidate selection, beat-safe stitching, continuity checks, per-section prompt tuning, and ACE failure prediction.
+Open stream is currently blocked follow-up:
+
+- `gemini-suno-prompt-v1` — blocked on real Gemini API smoke test with a WAV.
+
+`deep-analysis-v1` was closed as superseded on 2026-05-05 after audit. The code exists, but the original done criteria were never verified as written; open a fresh verification stream if real-audio deep-analysis QA becomes the next priority.
 
 See `work/ACTIVE.md` for stream status.
 
@@ -42,23 +47,21 @@ See `work/ACTIVE.md` for stream status.
 > Prefer `.platform/domains/<name>.md` files (cross-layer, focused) over repo-wide files.
 > Repo files (`backend.md`, `admin.md`, etc.) are conventions — load only if you need to understand patterns.
 
-- `.platform/domains/audio-analysis.md` — relevant domain for this stream
-- `.platform/domains/composition-engine.md` — relevant domain for this stream
-- `.platform/domains/llm-midi-generation.md` — relevant domain for this stream
-- `.platform/domains/local-orchestration.md` — relevant domain for this stream
-- `.platform/domains/juce-plugin.md` — relevant domain for this stream
+- `.platform/work/ACTIVE.md` — current stream registry
+- `.platform/domains/llm-midi-generation.md` — relevant domain for the remaining Gemini SUNO prompt stream
+- `.platform/domains/composition-engine.md` — relevant domain for composition context passed into Gemini
+- `.platform/domains/local-orchestration.md` — relevant domain for Node job orchestration and smoke-test flow
+- `.platform/memory/log.md` — closure and cleanup log
+- `.platform/memory/listen-tests.md` — listening feedback log moved out of workstream directory
 
 
-**Do not load:** unrelated JUCE/Xcode files unless the stream reaches UI/plugin integration.
+**Do not load:** unrelated JUCE/Xcode files unless a new implementation stream starts.
 **Never load:** `work/archive/*`
 
 ## Key files
 
-- `analysis/external_analyzers.py`
-- `analysis/full_arrangement.py`
-- `analysis/full_guide_audio.py`
-- `analysis/analyze.py`
-- `analysis/ace_step_generation.py`
-- `scripts/ace-proxy-ui.js`
-- `scripts/run-suno-proxy-pipeline.js`
-- `docs/ace-mj-working-pipeline.md`
+- `.platform/work/ACTIVE.md`
+- `.platform/work/gemini-suno-prompt-v1.md`
+- `.platform/work/archive/deep-analysis-v1.md`
+- `.platform/work/archive/full-arrangement-proxy-v1.md`
+- `.platform/work/archive/inspired-loop-engine-v1.md`
