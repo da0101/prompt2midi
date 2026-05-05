@@ -16,10 +16,10 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 ## Backend / source of truth
 
-- Implemented Phase 1 modules: `analysis/feature_extraction.py`, `analysis/analyze.py`, `analysis/midi_extraction.py`, `analysis/bass_transcription.py`, and `analysis/source_transcription.py`.
-- Full Arrangement / Arrangement Lock analysis now uses `analysis/full_arrangement.py`, `analysis/arrangement_sections.py`, `analysis/arrangement_reports.py`, `analysis/arrangement_lock.py`, and `analysis/arrangement_lock_reports.py` to write `arrangement-map.json`, `arrangement-lock-report.json`, `structure-debug.json`, `analysis-report.md`, `suno-structure-prompt.md`, and `full-arrangement-guide.mid`.
+- Implemented Phase 1 modules: `analysis/core/feature_extraction.py`, `analysis/analyze.py`, `analysis/midi/midi_extraction.py`, `analysis/midi/bass_transcription.py`, and `analysis/midi/source_transcription.py`.
+- Full Arrangement / Arrangement Lock analysis now uses `analysis/arrangement/full_arrangement.py`, `analysis/arrangement/arrangement_sections.py`, `analysis/arrangement/arrangement_reports.py`, `analysis/arrangement/arrangement_lock.py`, and `analysis/arrangement/arrangement_lock_reports.py` to write `arrangement-map.json`, `arrangement-lock-report.json`, `structure-debug.json`, `analysis-report.md`, `suno-structure-prompt.md`, and `full-arrangement-guide.mid`.
 - Section construction keeps major detected boundaries, merges tiny transition fragments, and splits overlong spans into phrase-sized producer sections so radio edits do not collapse into one giant intro.
-- Beat/downbeat evidence is compared across optional All-In-One output, the local librosa fallback in `analysis/beat_grid.py`, structure-provided downbeats, and estimated BPM bars. `structure-debug.json` includes `bar_grid_candidates` so mismatches are auditable.
+- Beat/downbeat evidence is compared across optional All-In-One output, the local librosa fallback in `analysis/core/beat_grid.py`, structure-provided downbeats, and estimated BPM bars. `structure-debug.json` includes `bar_grid_candidates` so mismatches are auditable.
 - Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, a `reference-sketch.mid` path, optional Basic Pitch model MIDI, optional Demucs stem-aware bass MIDI, and optional experimental `bass-transcription.mid`.
 - Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
 - Later phases: section segmentation, stem/instrument analysis, chord progression, stem-aware bass cleanup, and production-grade melody/bass MIDI extraction.
@@ -54,17 +54,17 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 
 - `promt.md`
 - `analysis/analyze.py`
-- `analysis/bass_transcription.py`
-- `analysis/feature_extraction.py`
-- `analysis/midi_extraction.py`
-- `analysis/source_transcription.py`
-- `analysis/arrangement_lock.py`
-- `analysis/arrangement_lock_reports.py`
-- `analysis/arrangement_reports.py`
-- `analysis/arrangement_sections.py`
-- `analysis/beat_grid.py`
-- `analysis/full_arrangement.py`
-- `analysis/test_feature_extraction.py`
+- `analysis/midi/bass_transcription.py`
+- `analysis/core/feature_extraction.py`
+- `analysis/midi/midi_extraction.py`
+- `analysis/midi/source_transcription.py`
+- `analysis/arrangement/arrangement_lock.py`
+- `analysis/arrangement/arrangement_lock_reports.py`
+- `analysis/arrangement/arrangement_reports.py`
+- `analysis/arrangement/arrangement_sections.py`
+- `analysis/core/beat_grid.py`
+- `analysis/arrangement/full_arrangement.py`
+- `analysis/tests/test_feature_extraction.py`
 - Planned: `analysis/segmentation.py`
 
 ## Decisions locked

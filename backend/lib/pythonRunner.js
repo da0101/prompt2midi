@@ -3,7 +3,7 @@ const path = require('node:path');
 const { prepareAudioForAnalysis } = require('./audioInput');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
-const analysisScript = path.join(repoRoot, 'analysis', 'analyze.py');
+const ANALYSIS_PYTHON = process.env.PROMPT2MIDI_ANALYSIS_PYTHON || process.env.PROMPT2MIDI_PYTHON || 'python3';
 const outputRoot = path.join(repoRoot, 'tmp', 'jobs');
 
 async function runAnalysis(audioPath, jobId, log = null, userPrompt = '', similarityLevel = '') {
@@ -27,7 +27,7 @@ function runPythonAnalysis(audioPath, outputDir, inputInfo, log = null) {
     if (log) log.stage('02.2 python engine', 'feature extraction + transcription');
     const userPromptArgs = inputInfo.userPrompt ? ['--user-prompt', inputInfo.userPrompt] : [];
     const similarityArgs = inputInfo.similarityLevel ? ['--similarity-level', inputInfo.similarityLevel] : [];
-    const child = spawn('python3', [analysisScript, '--audio', audioPath, '--output-dir', outputDir, ...userPromptArgs, ...similarityArgs], {
+    const child = spawn(ANALYSIS_PYTHON, ['-m', 'analysis.analyze', '--audio', audioPath, '--output-dir', outputDir, ...userPromptArgs, ...similarityArgs], {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe']
     });

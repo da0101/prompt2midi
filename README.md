@@ -65,11 +65,13 @@ JUCE result display
 |---|---|---|
 | JUCE plugin | `Source/PluginEditor.*`, `Source/PluginProcessor.*`, `Source/LocalApiClient.h` | UI only: choose/drop reference, send local job, poll status, show results. Audio processing stays pass-through. |
 | Node backend | `backend/server.js`, `backend/lib/*` | Local API, job state, input validation, MP3 decode, Python invocation, prompt aggregation, error normalization. |
-| Python analysis | `analysis/analyze.py`, `feature_extraction.py`, `enhanced_analysis.py`, `chord_detection.py`, `structure_analysis.py`, `genre_detection.py`, `drum_analysis.py` | Extract structured musical facts from WAV audio. Optional libraries improve results, but fallback paths keep the core running. |
-| MIDI/transcription | `analysis/midi_extraction.py`, `bass_transcription.py`, `source_transcription.py`, `stem_separation.py` | Write MIDI, run Basic Pitch, run Demucs, expose provenance and limitations for every MIDI asset. |
-| Composition | `analysis/composition.py`, `composition_patterns.py` | Generate a new original loop package from analysis hints. This is the main product output. |
+| Python analysis | `analysis/analyze.py`, `analysis/core/*`, `analysis/detectors/*` | Extract structured musical facts from WAV audio. Optional libraries improve results, but fallback paths keep the core running. |
+| MIDI/transcription | `analysis/midi/*` | Write MIDI, run Basic Pitch, run Demucs, expose provenance and limitations for every MIDI asset. |
+| Composition | `analysis/composition/*` | Generate a new original loop package from analysis hints. This is the main product output. |
 | Prompting | `backend/lib/promptGenerator.js`, `backend/lib/geminiPromptGenerator.js` | Turn structured facts into producer-facing copy and Suno prompts. Gemini is optional. |
-| Audio generation | `analysis/audio_generation.py`, `ace_step_generation.py`, `audiocraft_musicgen.py`, `musicgen_generation.py` | Optional local sample generation using ACE-Step first, then AudioCraft/MusicGen fallback paths. |
+| Audio generation | `analysis/generation/*` | Optional local sample generation using ACE-Step first, then AudioCraft/MusicGen fallback paths. |
+| Tooling scripts | `scripts/pipelines/*`, `scripts/setup/*`, `scripts/packaging/*`, `scripts/services/*`, `scripts/dev/*` | Local CLI runners, setup commands, package builders, service launchers, and developer refresh tools. |
+| Requirements/docs | `requirements/*`, `docs/pipelines/*`, `docs/backend/*`, `docs/qa/*` | Optional engine dependency pins and topic-grouped operational docs. |
 
 ## End-to-End Flow
 
@@ -101,7 +103,7 @@ The plugin posts JSON to the local backend:
 
 Node creates a job immediately so the plugin remains responsive. It validates absolute audio paths, rejects unsupported formats, enforces a size limit, and decodes MP3 input through `ffmpeg` into `tmp/jobs/<job_id>/decoded-input.wav`.
 
-Node then starts `analysis/analyze.py` as a child process and records pipeline events so the UI can show progress.
+Node then starts `python -m analysis.analyze` as a child process and records pipeline events so the UI can show progress.
 
 ### 3. Python Feature Analysis
 
@@ -148,7 +150,7 @@ The code intentionally distinguishes generated MIDI from transcription evidence.
 
 ### 5. Reference Transformation
 
-`analysis/reference_groove.py` fingerprints the reference for:
+`analysis/reference/reference_groove.py` fingerprints the reference for:
 
 - kick accents
 - bass accents
@@ -158,7 +160,7 @@ The code intentionally distinguishes generated MIDI from transcription evidence.
 - bass note tendencies
 - club energy
 
-`analysis/reference_transform.py` converts the user's direction into controls such as:
+`analysis/reference/reference_transform.py` converts the user's direction into controls such as:
 
 - preserve groove similarity
 - keep bass rhythm but vary notes
@@ -169,7 +171,7 @@ This is the bridge between "I like this song" and "make a new production with si
 
 ### 6. Original Composition Package
 
-`analysis/composition.py` generates the main product output:
+`analysis/composition/composition.py` generates the main product output:
 
 ```text
 tmp/jobs/<job_id>/exports/
@@ -197,7 +199,7 @@ The generator is deterministic in structure but randomized in musical choices. I
 
 There are two prompt paths:
 
-1. Python stub prompt from `composition.py`, always local.
+1. Python stub prompt from `analysis/composition/composition.py`, always local.
 2. Optional Gemini prompt from `backend/lib/geminiPromptGenerator.js` when `GEMINI_API_KEY` is present.
 
 The Gemini path uses `gemini-2.0-flash` by default and writes a single Suno paragraph from structured analysis and composition data. If Gemini is disabled, missing, times out, or fails, the job still succeeds with the local stub prompt.
@@ -210,7 +212,7 @@ Instrumental, no vocals. Inspired by the reference groove and production style, 
 
 ### 8. Optional Local Audio Sample
 
-`analysis/audio_generation.py` can prepare a 30-second local sample before the user uploads anything to Suno.
+`analysis/generation/audio_generation.py` can prepare a 30-second local sample before the user uploads anything to Suno.
 
 Provider order:
 
@@ -339,8 +341,8 @@ curl -s 'http://127.0.0.1:47321/result?id=<job_id>'
 Run Python tests:
 
 ```bash
-python3 -m unittest analysis/test_feature_extraction.py
-python3 -m unittest analysis/test_composition.py
+python3 -m unittest analysis.tests.test_feature_extraction
+python3 -m unittest analysis.tests.test_composition
 ```
 
 Run Node tests:

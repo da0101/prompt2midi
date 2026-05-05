@@ -49,10 +49,10 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - `backend/lib/pythonRunner.js`
 - `backend/lib/promptGenerator.js`
 - `backend/test/server.test.js`
-- `docs/local-backend.md`
-- `docs/manual-verification.md`
-- `requirements-demucs.txt`
-- `scripts/setup-stem-engine.sh`
+- `docs/backend/local-backend.md`
+- `docs/qa/manual-verification.md`
+- `requirements/demucs.txt`
+- `scripts/setup/setup-stem-engine.sh`
 
 ## Decisions locked
 

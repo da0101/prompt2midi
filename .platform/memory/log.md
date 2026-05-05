@@ -5,6 +5,7 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-05-05 — commit `1126f54`: chore: reorganize project cleanup layout — auto-logged
 - 2026-05-05 — blocked stream audits — kept `gemini-suno-prompt-v1` blocked on real Gemini smoke and archived `deep-analysis-v1` as superseded — separate implemented code from verified product criteria.
 - 2026-05-05 — stream closures — archived accepted `full-arrangement-proxy-v1` and `inspired-loop-engine-v1` — fine-tuning should be tracked as fresh scoped work.
 - 2026-05-05 — Agentboard stream cleanup — moved listen-test log to memory, archived verified `analysis-ui-v1`, marked Gemini/deep analysis blocked, and reset inspired-loop next action — keep `.platform/work/` limited to real streams with current state.
@@ -94,3 +95,5 @@ Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 2026-05-05 — debug: full guide drifted into unrelated/holiday-style output — fixed root cause: section ACE preflight routed to text2music with zero source conditioning and stitched failed candidates; full-guide sections now use light source-conditioned underground tribal/deep-tech style lock and failed section gates stop stitching.
 2026-05-05 — debug: full guide v2 still rendered single-pitch noise — fixed remaining root cause: full-arrangement metadata set source controls but `_task_type` still allowed `text2music`; full-arrangement sections now force ACE `cover` task type and regression-test that behavior.
 2026-05-05 — debug: CLI looked stuck after Hugging Face warning — fixed root cause: CLAP/HF genre detection ran inside one broad deep-analysis step without sub-progress; deep analysis now reports genre classifier import/audio prep/model load/inference plus chord and structure substeps.
+2026-05-05 — cleanup: project-cleanup-restructure-v1 first pass — reorganized `analysis/` into responsibility folders, converted Python/Node callers to direct package/module paths with no importer shims, removed tracked generated web build output and dead helpers, and verified Python/Node/web/Agentboard checks.
+2026-05-05 — cleanup: project-cleanup-restructure-v1 support layout — grouped `scripts/` by role, moved optional dependency pins into `requirements/`, grouped docs by topic, preserved npm command names, fixed the All-In-One Docker adapter path, and verified Node/Python/Agentboard checks.

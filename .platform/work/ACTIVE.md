@@ -5,6 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
+| project-cleanup-restructure-v1 | chore | in-progress | codex | 2026-05-05 |
 | gemini-suno-prompt-v1 | feature | blocked | claude-code | 2026-05-05 |
 
 ---

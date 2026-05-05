@@ -42,9 +42,9 @@ This domain covers turning structured musical analysis and user prompts into pro
 
 - `promt.md`
 - `backend/lib/promptGenerator.js`
-- `analysis/midi_extraction.py`
-- `analysis/source_transcription.py`
-- `analysis/stem_separation.py`
+- `analysis/midi/midi_extraction.py`
+- `analysis/midi/source_transcription.py`
+- `analysis/midi/stem_separation.py`
 - `Source/LocalApiClient.h`
 - Planned: local LLM runtime integration
 - Planned: source-aware melody/chord/bass extraction modules

@@ -10,26 +10,26 @@ import re
 import shutil
 import sys
 
-from bass_transcription import transcribe_bassline
-from beat_grid import analyze_beat_grid
-from chord_detection import detect_chords
-from composition import generate_inspired_loop
-from drum_analysis import analyze_drums, drum_pattern_to_midi_events
-from enhanced_analysis import better_bpm, better_key, estimate_groove, infer_genre
-from external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
-from feature_extraction import AnalysisError, analyze_wav
-from full_arrangement import build_full_arrangement_package
-from full_guide_audio import generate_full_arrangement_guide_audio
-from genre_detection import detect_genre
-from midi_extraction import write_note_events_midi, write_reference_sketch_midi
-from audio_generation import generate_reference_sample
-from ace_preflight import build_ace_preflight
-from reference_groove import analyze_reference_groove
-from reference_transform import build_reference_transform
-from source_transcription import can_run_model_transcription, transcribe_with_model
-from stem_separation import separate_for_transcription
-from structure_analysis import analyze_structure
-from vocal_analysis import analyze_vocal_role
+from analysis.arrangement.full_arrangement import build_full_arrangement_package
+from analysis.composition.composition import generate_inspired_loop
+from analysis.core.beat_grid import analyze_beat_grid
+from analysis.core.enhanced_analysis import better_bpm, better_key, estimate_groove, infer_genre
+from analysis.core.external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
+from analysis.core.feature_extraction import AnalysisError, analyze_wav
+from analysis.detectors.chord_detection import detect_chords
+from analysis.detectors.drum_analysis import analyze_drums, drum_pattern_to_midi_events
+from analysis.detectors.genre_detection import detect_genre
+from analysis.detectors.structure_analysis import analyze_structure
+from analysis.detectors.vocal_analysis import analyze_vocal_role
+from analysis.generation.audio_generation import generate_reference_sample
+from analysis.generation.full_guide_audio import generate_full_arrangement_guide_audio
+from analysis.midi.bass_transcription import transcribe_bassline
+from analysis.midi.midi_extraction import write_note_events_midi, write_reference_sketch_midi
+from analysis.midi.source_transcription import can_run_model_transcription, transcribe_with_model
+from analysis.midi.stem_separation import separate_for_transcription
+from analysis.reference.ace_preflight import build_ace_preflight
+from analysis.reference.reference_groove import analyze_reference_groove
+from analysis.reference.reference_transform import build_reference_transform
 
 
 def run(

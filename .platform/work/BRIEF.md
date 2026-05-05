@@ -1,67 +1,58 @@
 # Feature Brief — prompt2midi
 
-> Read this first — every session, every agent (Claude, Codex, Gemini).
-> 30-second orientation: what we're building, why, and where we stand.
-> Replace entirely when the active feature changes. Keep ≤60 lines.
+> Read this first every session. Keep <=60 lines.
 
-**Feature:** stream cleanup / blocked follow-ups
-**Status:** no active in-progress feature stream
-**Stream file:** `work/ACTIVE.md`
+**Feature:** project-cleanup-restructure-v1
+**Status:** in-progress
+**Stream file:** `work/project-cleanup-restructure-v1.md`
 
----
+## What We're Building
 
-## What we're building
-
-No feature stream is currently in active execution. The previous `full-arrangement-proxy-v1` and `inspired-loop-engine-v1` streams were accepted by the owner and archived on 2026-05-05.
+Production-readiness cleanup and repository restructuring before the next coding push.
 
 ## Why
 
-The workflow state was cleaned up so future sessions do not resume completed work or mix fine-tuning tasks into already accepted streams.
+The repo grew through fast experiments. We need clearer ownership boundaries, fewer runtime artifacts in git, and stable commands before production preparation continues.
 
-## What done looks like
+## Done Looks Like
 
-- `ab doctor` passes.
-- `ACTIVE.md` lists only real open streams.
-- Completed streams stay in `work/archive/`.
-- New config fine-tuning work starts as a fresh, scoped stream.
+- `analysis/` is grouped by responsibility and uses direct package imports.
+- Confirmed dead/generated tracked files are removed and ignored.
+- Node/Python entry points use stable commands and `python -m analysis...`.
+- Docs, scripts, requirements, and Agentboard references match the new layout.
+- Verification is green after file moves.
 
-## Architecture decisions locked
+## Locked Decisions
 
-- Completed streams should be archived instead of kept open for vague tuning.
-- `.platform/work/` should contain only active, blocked, or awaiting-verification stream files.
-- Supporting logs belong in `.platform/memory/`, not `.platform/work/`.
+- No importer-only shim files.
+- Keep local-first architecture: JUCE client -> Node orchestration -> Python analysis/generation.
+- Keep Python structured JSON contracts stable during module splits.
 
-## Current state
+## Current State
 
-Open stream is currently blocked follow-up:
-
+- `project-cleanup-restructure-v1` — active cleanup stream, implementation and verification green; final audit/commit pending.
 - `gemini-suno-prompt-v1` — blocked on real Gemini API smoke test with a WAV.
-
-`deep-analysis-v1` was closed as superseded on 2026-05-05 after audit. The code exists, but the original done criteria were never verified as written; open a fresh verification stream if real-audio deep-analysis QA becomes the next priority.
+- `deep-analysis-v1` — closed as superseded on 2026-05-05; open a fresh verification stream if real-audio deep-analysis QA becomes next priority.
 
 See `work/ACTIVE.md` for stream status.
 
-## Relevant context
+## Relevant Context
 
-> Only load the files listed here. Everything else is out of scope for this feature.
-> Prefer `.platform/domains/<name>.md` files (cross-layer, focused) over repo-wide files.
-> Repo files (`backend.md`, `admin.md`, etc.) are conventions — load only if you need to understand patterns.
+- `.platform/work/ACTIVE.md` — stream registry
+- `.platform/work/project-cleanup-restructure-v1.md` — current cleanup stream
+- `.platform/domains/audio-analysis.md` — `analysis/` layout
+- `.platform/domains/local-orchestration.md` — backend/scripts flow
+- `.platform/domains/composition-engine.md` — composition context
+- `.platform/domains/llm-midi-generation.md` — Gemini/SUNO follow-up
+- `.platform/domains/juce-plugin.md` — plugin/exporter boundaries
+- `.platform/memory/log.md` — chronological cleanup log
 
-- `.platform/work/ACTIVE.md` — current stream registry
-- `.platform/domains/llm-midi-generation.md` — relevant domain for the remaining Gemini SUNO prompt stream
-- `.platform/domains/composition-engine.md` — relevant domain for composition context passed into Gemini
-- `.platform/domains/local-orchestration.md` — relevant domain for Node job orchestration and smoke-test flow
-- `.platform/memory/log.md` — closure and cleanup log
-- `.platform/memory/listen-tests.md` — listening feedback log moved out of workstream directory
-
-
-**Do not load:** unrelated JUCE/Xcode files unless a new implementation stream starts.
+**Do not load:** archived streams unless needed for historical rationale.
 **Never load:** `work/archive/*`
 
-## Key files
+## Key Files
 
-- `.platform/work/ACTIVE.md`
-- `.platform/work/gemini-suno-prompt-v1.md`
-- `.platform/work/archive/deep-analysis-v1.md`
-- `.platform/work/archive/full-arrangement-proxy-v1.md`
-- `.platform/work/archive/inspired-loop-engine-v1.md`
+- `analysis/`
+- `backend/`
+- `scripts/`
+- `Source/`

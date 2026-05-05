@@ -14,8 +14,8 @@ Owns the deterministic composition layer: takes analysis facts and evidence and 
 
 ## Backend / source of truth
 
-- `analysis/composition.py` — main entry `generate_inspired_loop(analysis, evidence, output_dir, bars)` → composition dict
-- `analysis/midi_extraction.py` — dependency-free MIDI I/O, extended with `write_multitrack_midi()` for full_loop.mid
+- `analysis/composition/composition.py` — main entry `generate_inspired_loop(analysis, evidence, output_dir, bars)` → composition dict
+- `analysis/midi/midi_extraction.py` — dependency-free MIDI I/O, extended with `write_multitrack_midi()` for full_loop.mid
 - `analysis/analyze.py` — calls composition engine after analysis, integrates `composition` key into Python result
 
 ## Frontend / clients
@@ -32,8 +32,8 @@ Owns the deterministic composition layer: takes analysis facts and evidence and 
 
 ## Key files
 
-- `analysis/composition.py`
-- `analysis/midi_extraction.py`
+- `analysis/composition/composition.py`
+- `analysis/midi/midi_extraction.py`
 - `analysis/analyze.py`
 - `backend/lib/pythonRunner.js`
 - `backend/server.js`
