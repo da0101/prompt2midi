@@ -5,6 +5,8 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-05-05 — commit `9609c41`: Record ACE UI pipeline commit — auto-logged
+- 2026-05-05 — commit `93cad39`: Add ACE inspired loop UI and proxy pipeline — auto-logged
 - 2026-05-03 — implementation: optional Gemini ACE brief lane — added Gemini smart-brief and experimental-control flags to the ACE proxy runner/UI; Gemini now pre-analyzes locally, writes `gemini-ace-brief.json`, appends a producer brief to ACE prompts, and can conservatively suggest ACE slider-equivalent controls when explicitly enabled.
 - 2026-05-03 — debug: explicit added layers ignored by ACE prompt — fixed root cause: UI prompt text was passed but not promoted into the ACE caption as hard audible layers; cowbell and vocal-chop requests now become explicit high-priority caption controls.
 - 2026-05-01 — commit `6e1faf3`: updqte — auto-logged
