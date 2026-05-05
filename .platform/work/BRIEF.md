@@ -4,35 +4,35 @@
 > 30-second orientation: what we're building, why, and where we stand.
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
-**Feature:** inspired-loop-engine-v1 — product contract reframe + deterministic composition engine
-**Status:** in-progress
-**Stream file:** work/inspired-loop-engine-v1.md
+**Feature:** full-arrangement-proxy-v1
+**Status:** planning
+**Stream file:** `work/full-arrangement-proxy-v1.md`
 
 ---
 
 ## What we're building
 
-The last stream, `source-aware-transcription-v1`, is closed. The project now has a local source-aware bass path: Demucs separates a bass stem, Basic Pitch transcribes it, and the backend exposes `source-bass-transcription.mid` as a distinct MIDI asset.
+Full-song reference-inspired proxy generation for SUNO. The workflow should analyze an entire reference track, detect the bar-aligned arrangement structure, generate original ACE proxy audio section by section, let the user audition candidates, then stitch/export a full-length guide and prompt package.
 
 ## Why
 
-The user needs a credible path from real audio reference to editable Ableton MIDI, while staying local-first and clear about confidence.
+The user wants SUNO to follow a known song arrangement instead of inventing cheesy or unrelated structure. A strong full-length proxy should preserve genre, BPM, key area, groove, energy curve, breaks, drops, hooks, silences, and section proportions while staying original and copyright-safe.
 
 ## What done looks like
 
-- Select the next stream from `promt.md`.
-- Keep generated sketches, heuristic output, model transcription, and source-aware transcription clearly separated.
-- Preserve local-first operation and graceful fallback when optional engines are absent.
+- Full reference analysis produces a reliable `arrangement-map.json`, `analysis-report.md`, and `suno-structure-prompt.md`.
+- Full Arrangement mode cuts bar-aligned sections, generates ACE candidates per section, lets the user select/rerun sections, and stitches a full guide.
+- The existing 30-second ACE sample lane remains clean and unchanged for fast testing.
 
 ## Architecture decisions locked
 
-- Keep the existing JUCE → Node → Python contract from the previous streams.
-- Core workflow stays local-first; no mandatory cloud APIs.
-- Do not present MIDI as source-aware transcription unless the extraction path actually supports that claim.
+- Use section-by-section full-song generation as the default; do not rely on one-shot ACE full-song rendering.
+- Use a bar-grid contract: every generated section has target start/end bars, role, energy, duration, and transition metadata.
+- MIDI/stem extraction is optional evidence/debug for this stream, not the main audio output path.
 
 ## Current state
 
-The repo supports prompt/WAV/MP3 jobs, FFmpeg MP3 decoding, BPM/key confidence, `reference-sketch.mid`, optional Basic Pitch `model-transcription.mid`, optional Demucs-assisted `source-bass-transcription.mid`, full-mix `model-bass-transcription.mid`, and experimental heuristic `bass-transcription.mid`.
+The repo already contains a prototype scaffold: `analysis/external_analyzers.py` can call All-In-One/Essentia, `analysis/full_arrangement.py` writes structure artifacts, and `analysis/full_guide_audio.py` can cut sections and call ACE. It is not yet product-ready because it lacks reliable section audition, candidate selection, beat-safe stitching, continuity checks, per-section prompt tuning, and ACE failure prediction.
 
 See `work/ACTIVE.md` for stream status.
 
@@ -42,23 +42,23 @@ See `work/ACTIVE.md` for stream status.
 > Prefer `.platform/domains/<name>.md` files (cross-layer, focused) over repo-wide files.
 > Repo files (`backend.md`, `admin.md`, etc.) are conventions — load only if you need to understand patterns.
 
-- `.platform/domains/composition-engine.md` — primary domain for this stream (new)
-- `.platform/domains/audio-analysis.md` — analysis evidence layer
-- `.platform/domains/llm-midi-generation.md` — SUNO prompt (Phase 4, stub for now)
-- `.platform/domains/local-orchestration.md` — Node job lifecycle
-- `.platform/domains/juce-plugin.md` — JUCE result display
+- `.platform/domains/audio-analysis.md` — relevant domain for this stream
+- `.platform/domains/composition-engine.md` — relevant domain for this stream
+- `.platform/domains/llm-midi-generation.md` — relevant domain for this stream
+- `.platform/domains/local-orchestration.md` — relevant domain for this stream
+- `.platform/domains/juce-plugin.md` — relevant domain for this stream
 
 
-**Do not load:** `.platform/work/archive/*` unless auditing a closed stream.
+**Do not load:** unrelated JUCE/Xcode files unless the stream reaches UI/plugin integration.
 **Never load:** `work/archive/*`
 
 ## Key files
 
-- `analysis/bass_transcription.py`
-- `analysis/feature_extraction.py`
-- `analysis/midi_extraction.py`
+- `analysis/external_analyzers.py`
+- `analysis/full_arrangement.py`
+- `analysis/full_guide_audio.py`
 - `analysis/analyze.py`
-- `backend/lib/pythonRunner.js`
-- `backend/lib/promptGenerator.js`
-- `Source/LocalApiClient.h`
-- `docs/manual-verification.md`
+- `analysis/ace_step_generation.py`
+- `scripts/ace-proxy-ui.js`
+- `scripts/run-suno-proxy-pipeline.js`
+- `docs/ace-mj-working-pipeline.md`

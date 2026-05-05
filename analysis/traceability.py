@@ -63,6 +63,10 @@ def generation_trace_record(
             "task_type": payload.get("task_type"),
             "audio_cover_strength": payload.get("audio_cover_strength"),
             "cover_noise_strength": payload.get("cover_noise_strength"),
+            "inference_steps": payload.get("inference_steps"),
+            "guidance_scale": payload.get("guidance_scale"),
+            "seed": payload.get("seed"),
+            "reconstruction_diagnostic": payload.get("reconstruction_diagnostic"),
         },
         "style": {
             "brief": transform.get("style_brief"),
@@ -94,6 +98,8 @@ def _candidate_record(index: int, candidate: dict) -> dict:
         "quality": {
             "score": quality.get("score"),
             "selection_score": quality.get("selection_score"),
+            "reference_similarity": (quality.get("reference_similarity") or {}).get("score"),
+            "reference_similarity_details": quality.get("reference_similarity") or {},
             "pulse_score": quality.get("pulse_score"),
             "timbre_score": quality.get("timbre_score"),
             "rms": quality.get("rms"),

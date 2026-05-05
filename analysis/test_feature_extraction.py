@@ -21,6 +21,7 @@ from ace_step_generation import (
     _build_payload,
     _choose_candidate,
     _caption,
+    _explicit_layer_requests,
     _select_candidate_for_promotion,
     _selection_score,
     _source_conditioning,
@@ -512,6 +513,18 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("style, energy, BPM", low["prompt"])
         self.assertIn("signature sounds", low["prompt"])
 
+    def test_tribal_percussion_prompt_is_promoted_to_ace_priority_layer(self):
+        prompt = (
+            "continuous fast tribal percussion, loud congas and bongos, shakers, tambourine, "
+            "clave, wood hits, and toms over a house groove"
+        )
+
+        requested = _explicit_layer_requests(prompt)
+
+        self.assertIn("continuous loud fast tribal percussion", requested)
+        self.assertIn("first bar to last bar", requested)
+        self.assertIn("congas", requested)
+
     def test_very_high_profile_sits_between_high_and_near_identical(self):
         high = build_reference_transform("", {"reference_similarity_level": "high"})
         very_high = build_reference_transform("", {"reference_similarity_level": "very-high"})
@@ -746,6 +759,98 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("copied lyrics", payload["lm_negative_prompt"])
         self.assertIn("out-of-scale lead notes", payload["lm_negative_prompt"])
 
+    def test_reconstruction_diagnostic_payload_bypasses_anti_copy_guards(self):
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC",
+                "PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH",
+                "PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH",
+            )
+        }
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC"] = "1"
+            os.environ.pop("PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH", None)
+            os.environ.pop("PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH", None)
+            analysis = {
+                "reference_similarity_level": "near-identical",
+                "bpm": 120.0,
+                "key": "F major",
+                "genre": {"primary": "dance-pop", "tags": ["dance-pop", "club"], "confidence": 0.7},
+                "vocals": {"present": False},
+            }
+            analysis["reference_transform"] = build_reference_transform("near identical", analysis)
+
+            payload = _build_payload(
+                reference_audio=__file__,
+                prompt="Add loud tribal percussion",
+                analysis=analysis,
+                duration_seconds=15,
+                candidate_count=1,
+                model="test-model",
+            )
+
+            self.assertTrue(payload["reconstruction_diagnostic"])
+            self.assertEqual(payload["task_type"], "cover")
+            self.assertEqual(payload["audio_cover_strength"], 1.0)
+            self.assertEqual(payload["cover_noise_strength"], 1.0)
+            self.assertEqual(payload["reference_similarity"], 1.0)
+            self.assertIn("local diagnostic reconstruction", payload["prompt"])
+            self.assertIn("tribal percussion", payload["prompt"])
+            self.assertNotIn("copied hook", payload["lm_negative_prompt"])
+            self.assertNotIn("exact original bass pitch sequence", payload["lm_negative_prompt"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_reconstruction_diagnostic_respects_closeness_sliders(self):
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC",
+                "PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH",
+                "PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH",
+            )
+        }
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC"] = "1"
+            os.environ["PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH"] = "0.7"
+            os.environ["PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH"] = "0.5"
+            analysis = {
+                "reference_similarity_level": "near-identical",
+                "bpm": 120.0,
+                "key": "F major",
+                "genre": {"primary": "dance-pop", "tags": ["dance-pop", "club"], "confidence": 0.7},
+                "vocals": {"present": False},
+            }
+            analysis["reference_transform"] = build_reference_transform("near identical", analysis)
+
+            payload = _build_payload(
+                reference_audio=__file__,
+                prompt="same tempo and key area as the reference.",
+                analysis=analysis,
+                duration_seconds=15,
+                candidate_count=1,
+                model="test-model",
+            )
+
+            self.assertTrue(payload["reconstruction_diagnostic"])
+            self.assertEqual(payload["audio_cover_strength"], 0.7)
+            self.assertEqual(payload["cover_noise_strength"], 0.5)
+            self.assertEqual(payload["reference_similarity"], 0.7)
+            self.assertIn("strong source-guided diagnostic variation", payload["prompt"])
+            self.assertIn("do not make a literal reconstruction", payload["prompt"])
+            self.assertNotIn("match its groove, timing, arrangement shape, instrument balance, timbre family, dynamics, and mix energy as closely as ACE can", payload["prompt"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_fast_lane_conditional_vocal_wording_does_not_force_vocal_resynthesis(self):
         vocal_hint = _prompt_vocal_hint("new synth or vocal hook if reference has vocals")
         self.assertFalse(vocal_hint["present"])
@@ -775,6 +880,47 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertFalse(transform["vocals"]["preserve_role"])
         self.assertTrue(payload["instrumental"])
         self.assertEqual(payload["lyrics"], "[Instrumental]")
+
+    def test_explicit_added_layers_are_promoted_in_ace_caption(self):
+        analysis = {
+            "reference_similarity_level": "medium-high",
+            "bpm": 129.2,
+            "key": "G# major",
+            "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+            "groove": {"feel": "balanced"},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.8},
+        }
+        prompt = "same tempo and key area as the reference. add vocal chops and a cow bell"
+        transform = build_reference_transform(prompt, analysis)
+        analysis["reference_transform"] = transform
+        caption = _caption(prompt, analysis)
+
+        self.assertIn("requested added layers", caption)
+        self.assertIn("cowbell percussion layer", caption)
+        self.assertIn("short non-lyrical vocal chops", caption)
+        self.assertIn("clearly audible", caption)
+
+    def test_explicit_added_layers_survive_long_user_prompt(self):
+        analysis = {
+            "reference_similarity_level": "low",
+            "bpm": 129.2,
+            "key": "G# major",
+            "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+            "groove": {"feel": "balanced"},
+            "vocals": {"available": True, "present": True, "role": "lead vocal hook", "confidence": 0.8},
+        }
+        prompt = (
+            "Keep the same BPM, key area, 4/4 club pulse, bass weight, and underground house energy as the reference. "
+            + "Make this version percussion-led with a syncopated 16th-note groove. " * 20
+            + "Add a bright dry cowbell and short non-lyrical vocal chops as rhythmic percussion stabs."
+        )
+        transform = build_reference_transform(prompt, analysis)
+        analysis["reference_transform"] = transform
+        caption = _caption(prompt, analysis)
+
+        self.assertLessEqual(len(caption), 1300)
+        self.assertLess(caption.index("cowbell percussion layer"), caption.index("user direction:"))
+        self.assertIn("short non-lyrical vocal chops", caption)
 
     def test_unreliable_low_vocal_reference_uses_text_only_instrumental_hook_proxy(self):
         analysis = {

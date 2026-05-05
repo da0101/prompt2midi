@@ -3,6 +3,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { generateAceBrief } = require('../backend/lib/geminiAceBriefGenerator');
 
 const repoRoot = path.resolve(__dirname, '..');
 const referenceRunner = path.join(repoRoot, 'scripts', 'run-reference-pipeline.js');
@@ -18,7 +19,8 @@ async function main() {
   const reference = args.reference || args.audio;
   const outputDir = args.outputDir || args.output;
   const prompt = args.prompt || defaultPrompt();
-  const level = args.similarityLevel || args.level || 'medium-high';
+  let level = args.similarityLevel || args.level || 'medium-high';
+  let effectivePrompt = prompt;
   const duration = args.duration || '30';
   const candidates = args.candidates || '4';
   const packCandidate = Number.parseInt(args.packCandidate || args.selectCandidate || '0', 10);
@@ -29,7 +31,38 @@ async function main() {
 
   const runDir = path.resolve(outputDir);
   fs.mkdirSync(runDir, { recursive: true });
+  console.error('progress: preparing reference audio for ACE generation');
   const generationReference = await prepareReferenceForGeneration(reference, runDir);
+  console.error('progress: reference audio ready for ACE generation');
+  const geminiEnabled = Boolean(args.geminiBrief || args.geminiControl);
+  if (geminiEnabled) {
+    const gemini = await buildGeminiBrief({
+      generationReference,
+      runDir,
+      prompt,
+      level,
+      duration,
+      candidates,
+      args,
+    });
+    if (gemini && gemini.status === 'succeeded') {
+      effectivePrompt = mergeGeminiPrompt(prompt, gemini.ace_prompt_addition);
+      if (args.geminiControl && gemini.ace_controls) {
+        const controls = gemini.ace_controls;
+        if (controls.reference_strength !== undefined) {
+          process.env.PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH = String(controls.reference_strength);
+        }
+        if (controls.cover_noise_strength !== undefined) {
+          process.env.PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH = String(controls.cover_noise_strength);
+        }
+        if (controls.similarity_level) level = controls.similarity_level;
+        console.error(`progress: Gemini experimental controls applied${controls.reason ? ` — ${controls.reason}` : ''}`);
+      }
+      console.error('progress: Gemini ACE brief added to generation prompt');
+    } else if (gemini) {
+      console.error(`warning: Gemini ACE brief skipped: ${gemini.reason || gemini.error || gemini.status}`);
+    }
+  }
 
   const generationArgs = [
     referenceRunner,
@@ -40,7 +73,7 @@ async function main() {
     '--similarity-level',
     level,
     '--prompt',
-    prompt,
+    effectivePrompt,
     '--fast-sample',
     '--ace',
     '--candidates',
@@ -55,17 +88,21 @@ async function main() {
   if (packCandidate > 0) generationArgs.push('--select-candidate', String(packCandidate));
   if (args.steps) generationArgs.push('--steps', args.steps);
   if (args.guidance) generationArgs.push('--guidance', args.guidance);
+  if (args.seed) generationArgs.push('--seed', args.seed);
 
   process.env.PROMPT2MIDI_RICH_REFERENCE_COVER = process.env.PROMPT2MIDI_RICH_REFERENCE_COVER || '1';
   process.env.PROMPT2MIDI_REFERENCE_SECTION_STRATEGY = process.env.PROMPT2MIDI_REFERENCE_SECTION_STRATEGY || 'early_character';
 
+  console.error('progress: local analysis and ACE generation started');
   const generationCode = await run('node', generationArgs);
   if (generationCode !== 0) return generationCode;
+  console.error('progress: ACE generation finished; selecting proxy audio');
 
   const proxyAudio = chooseProxyAudio(runDir, packCandidate);
   if (!proxyAudio) return fail(`No generated ACE proxy candidate found under ${path.join(runDir, 'exports')}.`);
 
   const packageDir = path.join(runDir, 'suno-proxy-package');
+  console.error('progress: preparing Suno proxy package');
   const packageArgs = [
     proxyPackager,
     '--reference',
@@ -77,10 +114,11 @@ async function main() {
     '--duration',
     duration,
     '--prompt',
-    prompt,
+    effectivePrompt,
   ];
   const packageCode = await run('node', packageArgs);
   if (packageCode !== 0) return packageCode;
+  console.error('progress: Suno proxy package ready');
 
   console.log(JSON.stringify({
     ok: true,
@@ -89,8 +127,73 @@ async function main() {
     suno_package_dir: packageDir,
     upload: path.join(packageDir, 'suno-upload-proxy.wav'),
     prompt: path.join(packageDir, 'suno-proxy-prompt.md'),
+    gemini: geminiEnabled ? path.join(runDir, 'gemini-ace-brief.json') : null,
   }, null, 2));
   return 0;
+}
+
+async function buildGeminiBrief({ generationReference, runDir, prompt, level, duration, args }) {
+  const preflightDir = path.join(runDir, '_gemini-preflight');
+  fs.mkdirSync(preflightDir, { recursive: true });
+  console.error('progress: Gemini preflight analysis');
+  const preflightArgs = [
+    referenceRunner,
+    '--reference',
+    generationReference,
+    '--output-dir',
+    preflightDir,
+    '--similarity-level',
+    level,
+    '--prompt',
+    prompt,
+    '--fast-sample',
+    '--duration',
+    duration,
+  ];
+  if (args.vocals) preflightArgs.push('--vocals');
+  if (args.instrumental) preflightArgs.push('--instrumental');
+  if (args.referenceStart) preflightArgs.push('--reference-start', args.referenceStart);
+  if (args.referenceStrategy) preflightArgs.push('--reference-strategy', args.referenceStrategy);
+
+  const env = { ...process.env };
+  delete env.PROMPT2MIDI_ENABLE_ACE_STEP;
+  delete env.PROMPT2MIDI_ENABLE_AUDIOCRAFT;
+  delete env.PROMPT2MIDI_ENABLE_MUSICGEN;
+  const code = await run('node', preflightArgs, env);
+  if (code !== 0) return { status: 'failed', error: `preflight analysis exited with code ${code}` };
+
+  const runOutputPath = path.join(preflightDir, 'run-output.json');
+  if (!fs.existsSync(runOutputPath)) return { status: 'failed', error: 'preflight run-output.json missing' };
+  const runOutput = JSON.parse(fs.readFileSync(runOutputPath, 'utf8'));
+  if (!runOutput.ok) return { status: 'failed', error: runOutput.error && runOutput.error.message || 'preflight analysis failed' };
+
+  console.error(args.geminiControl ? 'progress: Gemini ACE brief + experimental controls' : 'progress: Gemini ACE brief');
+  try {
+    return await generateAceBrief({
+      analysis: runOutput.analysis || {},
+      userPrompt: prompt,
+      similarityLevel: level,
+      duration: Number.parseFloat(duration),
+      referenceStart: args.referenceStart ? Number.parseFloat(args.referenceStart) : null,
+      vocals: Boolean(args.vocals),
+      controls: {
+        reference_strength: Number.parseFloat(process.env.PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH || ''),
+        cover_noise_strength: Number.parseFloat(process.env.PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH || ''),
+      },
+      allowControl: Boolean(args.geminiControl),
+      outputDir: runDir,
+    });
+  } catch (error) {
+    return { status: 'failed', error: error.message || String(error) };
+  }
+}
+
+function mergeGeminiPrompt(userPrompt, geminiBrief) {
+  const base = String(userPrompt || '').trim();
+  const brief = String(geminiBrief || '').trim();
+  if (!brief) return base;
+  if (!base) return `Gemini producer brief for ACE: ${brief}`;
+  return `${base}. Gemini producer brief for ACE: ${brief}`;
 }
 
 function chooseProxyAudio(runDir, explicitCandidate) {
@@ -148,6 +251,11 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') parsed.help = true;
     else if (arg === '--vocals') parsed.vocals = true;
     else if (arg === '--instrumental') parsed.instrumental = true;
+    else if (arg === '--gemini-brief') parsed.geminiBrief = true;
+    else if (arg === '--gemini-control') {
+      parsed.geminiBrief = true;
+      parsed.geminiControl = true;
+    }
     else if (arg.startsWith('--')) {
       const key = toCamel(arg.slice(2));
       const value = argv[index + 1];
@@ -165,11 +273,14 @@ function toCamel(name) {
   return name.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
 }
 
-function run(command, args) {
+function run(command, args, env = process.env) {
   return new Promise((resolve) => {
+    if (env.PROMPT2MIDI_TRACE_PROGRESS === '1' && path.basename(String(args[0] || '')) === 'run-reference-pipeline.js') {
+      console.error(`trace: launching reference pipeline with trace progress enabled`);
+    }
     const child = spawn(command, args, {
       cwd: repoRoot,
-      env: process.env,
+      env,
       stdio: 'inherit',
     });
     child.on('exit', (code, signal) => {
@@ -221,7 +332,10 @@ Options:
   --reference-start <seconds>   Force the local reference section used to condition ACE.
   --reference-strategy <name>   Section picker: early_character or stable_energy. Defaults to early_character.
   --steps <n>                   ACE inference steps.
-  --guidance <n>                ACE guidance scale.`);
+  --guidance <n>                ACE guidance scale.
+  --seed <n|-1>                 ACE seed. -1 keeps random generation.
+  --gemini-brief                Use Gemini to create a richer ACE producer brief from local analysis + user direction.
+  --gemini-control              Experimental: let Gemini suggest conservative ACE reference/noise controls too.`);
 }
 
 function fail(message) {

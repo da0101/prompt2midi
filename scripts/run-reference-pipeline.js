@@ -11,6 +11,7 @@ const LEVELS = new Set(['low', 'medium-low', 'medium', 'medium-high', 'high', 'v
 
 function makeProgressRenderer() {
   const isTTY = Boolean(process.stderr.isTTY);
+  const machineReadable = process.env.PROMPT2MIDI_TRACE_PROGRESS === '1';
   const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
   // ANSI helpers — empty strings when not a TTY so plain text still works
@@ -45,6 +46,10 @@ function makeProgressRenderer() {
   // Begin a new step — completes the previous one as ✓
   function step(text) {
     done(true);
+    if (machineReadable) {
+      process.stderr.write(`progress: ${text}\n`);
+      return;
+    }
     current = text;
     color = stepColor(text);
     if (isTTY) {
@@ -130,6 +135,7 @@ async function main() {
   if (args.candidates) env.PROMPT2MIDI_ACE_STEP_CANDIDATES = args.candidates;
   if (args.steps) env.PROMPT2MIDI_ACE_STEP_STEPS = args.steps;
   if (args.guidance) env.PROMPT2MIDI_ACE_STEP_GUIDANCE = args.guidance;
+  if (args.seed) env.PROMPT2MIDI_ACE_STEP_SEED = args.seed;
   if (args.duration || args.sampleDuration) env.PROMPT2MIDI_REFERENCE_SAMPLE_DURATION = args.duration || args.sampleDuration;
   if (args.referenceStart) env.PROMPT2MIDI_REFERENCE_SECTION_START = args.referenceStart;
   if (args.referenceStrategy) env.PROMPT2MIDI_REFERENCE_SECTION_STRATEGY = args.referenceStrategy;
@@ -275,6 +281,7 @@ Options:
   --auto-select <yes>           Use advisory quality scoring to create sample.wav automatically.
   --steps <n>                   ACE diffusion steps.
   --guidance <n>                ACE guidance scale.
+  --seed <n|-1>                 ACE seed. -1 keeps random generation.
   --control-scaffold            Generate an in-key bass/drum control scaffold and use it as ACE's cover reference.
   --no-control-scaffold         Disable automatic scaffold routing for bass-lock prompts.
   --bass-proxy-source           Experimental diagnostic only. Uses high-passed reference + generated bass guide; automatically skipped for rich/vocal references unless PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY=1.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -53,6 +54,16 @@ def generate_with_ace_step(
         candidate_count=candidate_count,
         model=model,
     )
+    effective_prompt_path = os.path.abspath(os.path.join(output_dir, "ace-effective-prompt.txt"))
+    Path(effective_prompt_path).write_text(payload["prompt"] + "\n", encoding="utf-8")
+    _progress(
+        "ace-step: effective controls "
+        f"task={payload.get('task_type')} "
+        f"reference_guidance={payload.get('audio_cover_strength')} "
+        f"audio_start_amount={payload.get('cover_noise_strength')} "
+        f"requested_similarity={payload.get('requested_reference_similarity')} "
+        f"effective_similarity={payload.get('reference_similarity')}"
+    )
     _progress("ace-step: submitting reference-conditioned generation task")
     task_id = _submit_task(base_url, payload)
     results = _poll_task(base_url, task_id)
@@ -90,6 +101,7 @@ def generate_with_ace_step(
         "provider": "ace_step",
         "model": model,
         "prompt": payload["prompt"],
+        "effective_prompt": effective_prompt_path,
         "reference_audio": os.path.abspath(reference_audio),
         "task_id": task_id,
         "candidate_count": len(candidates_payload),
@@ -143,18 +155,36 @@ def _build_payload(
 ) -> dict:
     bpm = _bpm(analysis)
     key_scale = _key_scale(analysis)
-    caption = _caption(prompt, analysis)
+    reconstruction_diagnostic = _reconstruction_diagnostic_enabled()
     transform = analysis.get("reference_transform") or {}
     requested_similarity = _groove_similarity(transform)
-    effective_similarity = _effective_similarity(transform, requested_similarity)
-    task_type = os.environ.get("PROMPT2MIDI_ACE_STEP_TASK_TYPE") or _task_type(transform, effective_similarity)
+    base_effective_similarity = _effective_similarity(transform, requested_similarity)
+    task_type = "cover" if reconstruction_diagnostic else (
+        os.environ.get("PROMPT2MIDI_ACE_STEP_TASK_TYPE") or _task_type(transform, base_effective_similarity)
+    )
     is_cover = task_type in {"cover", "cover-nofsq"}
-    conditioning = _source_conditioning(transform, effective_similarity, is_cover)
+    conditioning = _source_conditioning(transform, base_effective_similarity, is_cover)
+    audio_cover_strength = float(
+        os.environ.get("PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH")
+        or ("1.0" if reconstruction_diagnostic else conditioning["reference_strength"])
+    )
+    cover_noise_strength = float(
+        os.environ.get("PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH")
+        or ("1.0" if reconstruction_diagnostic else conditioning["cover_noise_strength"])
+    )
+    diagnostic_intensity = _diagnostic_intensity(audio_cover_strength, cover_noise_strength)
+    effective_similarity = diagnostic_intensity if reconstruction_diagnostic else base_effective_similarity
+    caption = (
+        _reconstruction_caption(prompt, analysis, diagnostic_intensity)
+        if reconstruction_diagnostic
+        else _caption(prompt, analysis)
+    )
     reference_path = os.path.abspath(reference_audio)
     vocal = _vocal_transform(transform, analysis)
     direct_vocal = _uses_direct_vocal(vocal)
     instrumental = not direct_vocal
     reference_audio_path = reference_path if is_cover else None
+    seed_value = int(os.environ.get("PROMPT2MIDI_ACE_STEP_SEED") or "-1")
     return {
         "task_type": task_type,
         "prompt": caption,
@@ -178,22 +208,64 @@ def _build_payload(
         "use_cot_caption": os.environ.get("PROMPT2MIDI_ACE_STEP_COT_CAPTION", "0") != "0",
         "use_cot_language": os.environ.get("PROMPT2MIDI_ACE_STEP_COT_LANGUAGE", "0") != "0",
         "inference_steps": int(os.environ.get("PROMPT2MIDI_ACE_STEP_STEPS") or "12"),
+        "seed": seed_value,
+        "use_random_seed": seed_value < 0,
         "guidance_scale": float(os.environ.get("PROMPT2MIDI_ACE_STEP_GUIDANCE") or "7.0"),
         "lm_model_path": os.environ.get("PROMPT2MIDI_ACE_STEP_LM_MODEL") or "acestep-5Hz-lm-0.6B",
         "lm_backend": os.environ.get("PROMPT2MIDI_ACE_STEP_LM_BACKEND") or "mlx",
         "lm_temperature": float(os.environ.get("PROMPT2MIDI_ACE_STEP_LM_TEMPERATURE") or "0.72"),
         "lm_cfg_scale": float(os.environ.get("PROMPT2MIDI_ACE_STEP_LM_CFG") or "2.4"),
-        "audio_cover_strength": float(
-            os.environ.get("PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH") or conditioning["reference_strength"]
-        ),
-        "cover_noise_strength": float(
-            os.environ.get("PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH") or conditioning["cover_noise_strength"]
-        ),
-        "lm_negative_prompt": _negative_prompt(vocal),
+        "audio_cover_strength": audio_cover_strength,
+        "cover_noise_strength": cover_noise_strength,
+        "lm_negative_prompt": _reconstruction_negative_prompt(vocal) if reconstruction_diagnostic else _negative_prompt(vocal),
+        "reconstruction_diagnostic": reconstruction_diagnostic,
         "reference_similarity": effective_similarity,
         "requested_reference_similarity": requested_similarity,
         "difference_level": transform.get("difference_level"),
     }
+
+
+def _reconstruction_diagnostic_enabled() -> bool:
+    return os.environ.get("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC") == "1"
+
+
+def _diagnostic_intensity(reference_strength: float, cover_noise_strength: float) -> float:
+    return max(0.0, min(1.0, max(float(reference_strength or 0.0), float(cover_noise_strength or 0.0))))
+
+
+def _reconstruction_caption(prompt: str, analysis: dict, intensity: float = 1.0) -> str:
+    user = " ".join((prompt or "").replace("\n", " ").split())
+    key = _key_scale(analysis)
+    if intensity >= 0.92:
+        base = (
+            "local diagnostic reconstruction: use the source audio as the primary blueprint; "
+            "match its groove, timing, arrangement shape, instrument balance, timbre family, dynamics, and mix energy as closely as ACE can"
+        )
+    elif intensity >= 0.55:
+        base = (
+            "strong source-guided diagnostic variation: keep the reference groove, timing, arrangement shape, instrument balance, "
+            "timbre family, dynamics, and mix energy clearly recognizable, but do not make a literal reconstruction"
+        )
+    elif intensity >= 0.4:
+        base = (
+            "balanced source-guided diagnostic variation: use the reference as an audible anchor for groove, energy, and sound family, "
+            "while changing performance details, fills, small melodic moves, and sound-design choices"
+        )
+    else:
+        base = (
+            "loose source-guided diagnostic variation: use the reference for broad tempo, energy, and attitude only, "
+            "with a clearly new groove treatment and new sound-design details"
+        )
+    additions = [
+        "do not reinterpret the reference as a new style brief",
+        f"keep the same tempo and {key} key area",
+    ]
+    requested_layers = _explicit_layer_requests(user)
+    if requested_layers:
+        additions.insert(0, requested_layers)
+    elif user and user.lower().strip(" .") not in {"same tempo and key area as the reference", "same tempo and key area as the reference."}:
+        additions.insert(0, f"requested change: {_sentence_limited(user, 420)}")
+    return _sentence_limited(". ".join([base] + additions), 1300)
 
 
 def _caption(prompt: str, analysis: dict) -> str:
@@ -216,6 +288,7 @@ def _caption(prompt: str, analysis: dict) -> str:
     bass_guard = _bass_guard_text(transform)
     if ((transform or {}).get("bass") or {}).get("preserve_sound_design") and "bass lock:" not in base.lower():
         base = f"{bass_guard}. {base}"
+    requested_layers = _explicit_layer_requests(user)
     style_line = (
         "use the reference for tempo, groove pocket, energy, and arrangement feel"
         if user
@@ -251,7 +324,7 @@ def _caption(prompt: str, analysis: dict) -> str:
     if direct_vocal:
         additions.insert(
             4,
-            f"preserve the reference's {vocal.get('role', 'vocal hook')} function with a new melody contour",
+            f"preserve the reference's role by creating a new {vocal.get('role', 'vocal hook')} with a new melody contour",
         )
     elif vocal.get("preserve_role"):
         additions.insert(
@@ -262,8 +335,47 @@ def _caption(prompt: str, analysis: dict) -> str:
         additions.insert(1, f"genre tags: {genre_text}")
     if groove_text:
         additions.insert(2, f"groove feel: {groove_text}")
-    caption = f"{base}. " + ". ".join(additions)
+    priority = []
+    if requested_layers:
+        priority.append(f"priority requested layers: {requested_layers}")
+    if user:
+        priority.append(f"user direction: {_sentence_limited(base, 760)}")
+    else:
+        priority.append(base)
+
+    caption = ". ".join(priority + additions)
     return _sentence_limited(caption, 1300)
+
+
+def _explicit_layer_requests(prompt: str) -> str:
+    text = " ".join((prompt or "").lower().replace("-", " ").split())
+    if not text:
+        return ""
+
+    blocked_vocal_chops = re.search(
+        r"\b(no|avoid|without|remove)\b.{0,32}\b(vocal\s+chops?|voice\s+chops?|chopped\s+vocals?)\b",
+        text,
+    )
+    controls = []
+    if re.search(r"\b(cow\s*bell|cowbell)\b", text):
+        controls.append(
+            "an audible dry cowbell percussion layer with short rhythmic accent hits or turnaround fills"
+        )
+    if not blocked_vocal_chops and re.search(r"\b(vocal\s+chops?|voice\s+chops?|chopped\s+vocals?)\b", text):
+        controls.append(
+            "short non-lyrical vocal chops used as rhythmic hook or percussion texture, not lead singing"
+        )
+    if re.search(
+        r"\b(tribal\s+percussion|tribal\s+drums?|congas?|bongos?|hand\s+percussion|shakers?|tambourines?|clave|wood\s+hits?|toms?)\b",
+        text,
+    ):
+        controls.append(
+            "continuous loud fast tribal percussion as a main audible layer from first bar to last bar: "
+            "dense 16th-note congas, bongos, shakers, tambourine, clave or wood hits, and toms over the house kick"
+        )
+    if not controls:
+        return ""
+    return "requested added layers: " + "; ".join(controls) + "; make these layers clearly audible in the mix"
 
 
 def _vocal_transform(transform: dict, analysis: dict | None = None) -> dict:
@@ -374,6 +486,18 @@ def _negative_prompt(vocal: dict) -> str:
             + ", copied hook, copied lyrics, copied vocal identity, impersonation, off-key vocals, robotic alien voice"
         )
     return common + ", lead vocals, lyrical singing, copied hook, copied vocal identity"
+
+
+def _reconstruction_negative_prompt(vocal: dict) -> str:
+    common = (
+        "atonal high pitched artifacts, alien glitches, sci-fi lasers, metallic chirps, "
+        "cartoon toy instruments, chipmunk sounds, harsh squeals, random unrelated melodies, "
+        "off-key bass notes, out-of-scale lead notes, unresolved chromatic melody, clashing wrong notes, "
+        "dissonant random pitch, distorted clipping, weak kick, thin bass, unusable experimental noises, non-musical output"
+    )
+    if _uses_direct_vocal(vocal):
+        return common + ", off-key vocals, robotic alien voice"
+    return common
 
 
 def _sentence_limited(text: str, limit: int) -> str:
@@ -580,7 +704,9 @@ def _download_candidates(base_url: str, results: list[dict], output_dir: str, ta
             continue
         url = file_url if str(file_url).startswith("http") else f"{base_url}{file_url}"
         output_path = os.path.abspath(os.path.join(output_dir, f"candidate-{index}.wav"))
+        _progress(f"ace-step: downloading candidate {index}")
         _download(url, output_path)
+        _progress(f"ace-step: scoring candidate {index}")
         quality = score_audio_candidate(output_path, target_duration=target_duration)
         similarity = score_groove_similarity(reference_groove, output_path, bpm) if reference_groove else {}
         if similarity:

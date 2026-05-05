@@ -11,6 +11,9 @@
     "setup:transcription": "bash scripts/setup-transcription-engine.sh",
     "setup:ace-step": "bash scripts/setup-ace-step-engine.sh",
     "ace-step:start": "bash scripts/start-ace-step-api.sh",
+    "dev:web": "bash scripts/launchers/start-web-ui.sh",
+    "dev:api": "bash scripts/launchers/start-ace-proxy-api.sh",
+    "dev:ace": "bash scripts/launchers/start-ace-step-model-api.sh",
     "reference": "node scripts/run-reference-pipeline.js",
     "sample:fast": "node scripts/run-fast-sample.js",
     "sample:structured": "node scripts/run-structured-sample.js",
@@ -19,6 +22,8 @@
     "suno:prepare": "node scripts/prepare-suno-cover.js",
     "suno:proxy": "node scripts/prepare-suno-proxy.js",
     "suno:proxy-run": "node scripts/run-suno-proxy-pipeline.js",
+    "ace:ui": "node --env-file=.env scripts/ace-proxy-ui.js",
+    "web:dev": "concurrently -n api,vue -c cyan,green \"node --env-file=.env scripts/ace-proxy-ui.js\" \"npm run dev --prefix web -- --host 127.0.0.1\"",
     "feedback": "node scripts/record-listen-feedback.js",
     "start": "node --env-file=.env backend/server.js",
     "test": "node --test backend/test/*.test.js",
@@ -29,5 +34,9 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
   }
 }
