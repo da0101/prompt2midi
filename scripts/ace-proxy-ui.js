@@ -32,23 +32,23 @@ const NON_DIAGNOSTIC_NEAR_COPY = {
 };
 
 const STEP_PROGRESS = [
-  [/starting ACE server/i, 3],
-  [/ACE server ready/i, 4],
+  [/starting local generator/i, 3],
+  [/local generator ready/i, 4],
   [/preparing reference audio/i, 8],
   [/reference audio ready/i, 10],
-  [/local analysis and ACE generation started|started /i, 12],
+  [/local analysis and generation started|started /i, 12],
   [/decod|reading audio|feature extraction/i, 15],
   [/enhanced analysis/i, 22],
   [/external analysis/i, 27],
   [/deep analysis|genre|chords|structure/i, 32],
   [/gemini/i, 38],
   [/fast sample lane/i, 42],
-  [/generating .*ACE sample batch/i, 48],
+  [/generating .*sample batch/i, 48],
   [/submitting reference-conditioned|submitting .*generation task/i, 55],
   [/waiting for task/i, 62],
   [/downloading candidate/i, 84],
   [/scoring candidate/i, 88],
-  [/ACE generation finished|selecting proxy audio/i, 91],
+  [/generation finished|selecting proxy audio/i, 91],
   [/preparing Suno proxy package|preparing generated proxy|suno-proxy/i, 94],
   [/Suno proxy package ready/i, 98],
 ];
@@ -58,9 +58,11 @@ function createRun(input) {
   const id = new Date().toISOString().replace(/\D/g, '').slice(0, 14) + '-' + Math.random().toString(16).slice(2, 8);
   const reference = String(input.reference || '').trim();
   const prompt = String(input.prompt || 'same tempo and key area as the reference.').trim();
+  const renderMode = input.renderMode === 'full-track' ? 'full-track' : 'sample';
+  const fullTrack = renderMode === 'full-track';
   let similarityLevel = normalizeLevel(input.similarityLevel || 'medium-high');
-  const referenceStart = clampNumber(input.referenceStart, 0, 600, 8);
-  const duration = clampNumber(input.duration, 10, caps.maxDurationSeconds, 30);
+  const referenceStart = fullTrack ? 0 : clampNumber(input.referenceStart, 0, 600, 8);
+  const duration = fullTrack ? 'full' : clampNumber(input.duration, 10, caps.maxDurationSeconds, 30);
   const candidates = Math.round(clampNumber(input.candidates, 1, caps.maxCandidates, Math.min(4, caps.maxCandidates)));
   let referenceStrength = clampNumber(input.referenceStrength, 0, 1, 0.32);
   let coverNoiseStrength = clampNumber(input.coverNoiseStrength, 0, 1, 0.14);
@@ -100,6 +102,8 @@ function createRun(input) {
     input: {
       reference,
       prompt,
+      renderMode,
+      fullTrack,
       similarityLevel,
       referenceStart,
       duration,
@@ -129,8 +133,8 @@ function createRun(input) {
 
 async function prepareAndStartRun(run) {
   try {
-    updateRun(run, 'queued', 3, 'Starting ACE server');
-    addEvent(run, 'progress', 'starting ACE server');
+    updateRun(run, 'queued', 3, 'Starting local generator');
+    addEvent(run, 'progress', 'starting local generator');
     await ensureAceReady(run);
     startRun(run);
   } catch (error) {
@@ -142,21 +146,21 @@ async function ensureAceReady(run) {
   if (autoStartAce) {
     await startAceServer();
   } else {
-    addEvent(run, 'trace', 'ACE auto-start disabled; expecting separate ACE-Step terminal on 127.0.0.1:8001');
+    addEvent(run, 'trace', 'Auto-start disabled; expecting separate local generator terminal on 127.0.0.1:8001');
   }
   const deadline = Date.now() + 180000;
   while (Date.now() < deadline) {
     const health = await getAceHealth();
     if (health.running) {
-      updateRun(run, 'queued', 4, 'ACE server ready');
-      addEvent(run, 'progress', 'ACE server ready');
+      updateRun(run, 'queued', 4, 'Local generator ready');
+      addEvent(run, 'progress', 'local generator ready');
       return;
     }
-    updateRun(run, 'queued', 4, 'Waiting for ACE server to become ready');
-    addEvent(run, 'progress', health.error ? `ACE not ready: ${health.error}` : 'ACE not ready yet');
+    updateRun(run, 'queued', 4, 'Waiting for local generator to become ready');
+    addEvent(run, 'progress', health.error ? `Local generator not ready: ${health.error}` : 'Local generator not ready yet');
     await sleep(3000);
   }
-  throw new Error('ACE server did not become ready within 180 seconds.');
+  throw new Error('Local generator did not become ready within 180 seconds.');
 }
 
 async function startAceServer() {
@@ -171,19 +175,19 @@ async function startAceServerInner() {
   const health = await getAceHealth();
   if (health.running) {
     aceState.status = 'running';
-    aceState.message = 'ACE server is already running';
+    aceState.message = 'Local generator is already running';
     return getAceStatusPayload();
   }
   if (aceState.child && !aceState.child.killed) {
     aceState.status = 'starting';
-    aceState.message = 'ACE server is starting';
+    aceState.message = 'Local generator is starting';
     return getAceStatusPayload();
   }
 
   aceState.status = 'starting';
-  aceState.message = 'Starting ACE server';
+  aceState.message = 'Starting local generator';
   aceState.startedByUi = true;
-  addAceLog('Starting ACE server with scripts/start-ace-step-api.sh');
+  addAceLog('Starting local generator');
 
   const child = spawn('bash', [aceStarter], {
     cwd: repoRoot,
@@ -197,19 +201,19 @@ async function startAceServerInner() {
   child.on('error', (error) => {
     aceState.status = 'failed';
     aceState.message = error.message || String(error);
-    addAceLog(`ACE server error: ${aceState.message}`);
+    addAceLog(`Local generator error: ${aceState.message}`);
   });
   child.on('exit', (code, signal) => {
     if (aceState.child === child) aceState.child = null;
     if (signal) {
       aceState.status = 'stopped';
-      aceState.message = `ACE server stopped by ${signal}`;
+      aceState.message = `Local generator stopped by ${signal}`;
     } else if (code === 0) {
       aceState.status = 'stopped';
-      aceState.message = 'ACE server stopped';
+      aceState.message = 'Local generator stopped';
     } else {
       aceState.status = 'failed';
-      aceState.message = `ACE server exited with code ${code}`;
+      aceState.message = `Local generator exited with code ${code}`;
     }
     addAceLog(aceState.message);
   });
@@ -220,7 +224,7 @@ async function startAceServerInner() {
 async function stopAceServer({ managedOnly = false } = {}) {
   const activeRun = [...runs.values()].some((run) => run.status === 'running' || run.status === 'queued');
   if (activeRun) {
-    aceState.message = 'Not stopping ACE while a generation run is active';
+    aceState.message = 'Not stopping the local generator while a generation run is active';
     addAceLog(aceState.message);
     return getAceStatusPayload();
   }
@@ -241,7 +245,7 @@ async function stopAceServer({ managedOnly = false } = {}) {
   }
 
   aceState.status = 'stopping';
-  aceState.message = stopped ? 'Stopping ACE server' : 'No ACE server process found';
+  aceState.message = stopped ? 'Stopping local generator' : 'No local generator process found';
   addAceLog(aceState.message);
   return getAceStatusPayload();
 }
@@ -260,15 +264,15 @@ async function getAceStatusPayload() {
     aceState.message = health.loadedModel ? `Running: ${health.loadedModel}` : 'Running';
   } else if (activeRun) {
     aceState.status = 'busy';
-    aceState.message = health.error ? `ACE is busy or warming up: ${health.error}` : 'ACE is busy or warming up';
+    aceState.message = health.error ? `Local generator is busy or warming up: ${health.error}` : 'Local generator is busy or warming up';
   } else if (aceState.child && !aceState.child.killed) {
     aceState.status = aceState.status === 'stopping' ? 'stopping' : 'starting';
-    aceState.message = health.error ? `ACE process exists, waiting for health: ${health.error}` : 'ACE process exists, waiting for health';
+    aceState.message = health.error ? `Local generator process exists, waiting for health: ${health.error}` : 'Local generator process exists, waiting for health';
   } else if (aceState.status !== 'starting' && aceState.status !== 'stopping') {
     const pids = await findAcePids();
     if (pids.length) {
       aceState.status = 'busy';
-      aceState.message = health.error ? `ACE process is alive but health timed out: ${health.error}` : 'ACE process is alive but health is not responding';
+      aceState.message = health.error ? `Local generator process is alive but health timed out: ${health.error}` : 'Local generator process is alive but health is not responding';
     } else {
       aceState.status = 'stopped';
       aceState.message = health.error || 'Stopped';
@@ -300,11 +304,11 @@ function getAceCapabilities() {
   const maxCandidates = memoryClassGb >= 32 ? 6 : 4;
   const maxDurationSeconds = memoryClassGb >= 64 ? 240 : memoryClassGb >= 32 ? 180 : memoryClassGb >= 16 ? 120 : 60;
   const steps = isTurbo
-    ? { min: 1, max: 8, default: 8, note: 'Turbo ACE clamps requested steps above 8, so 8 is the real maximum.' }
-    : { min: 8, max: memoryClassGb >= 64 ? 64 : memoryClassGb >= 32 ? 48 : 32, default: memoryClassGb >= 32 ? 32 : 24, note: 'Non-turbo ACE can use more steps when memory allows.' };
+    ? { min: 1, max: 8, default: 8, note: 'Fast model clamps requested steps above 8, so 8 is the real maximum.' }
+    : { min: 8, max: memoryClassGb >= 64 ? 64 : memoryClassGb >= 32 ? 48 : 32, default: memoryClassGb >= 32 ? 32 : 24, note: 'Non-turbo models can use more steps when memory allows.' };
   const guidance = isTurbo
-    ? { min: 1, max: 1, default: 1, note: 'Turbo ACE overrides guidance to 1.0, so this is fixed for the current model.' }
-    : { min: 1, max: 20, default: 7, note: 'Guidance affects prompt strength on non-turbo ACE models.' };
+    ? { min: 1, max: 1, default: 1, note: 'Fast model overrides guidance to 1.0, so this is fixed for the current model.' }
+    : { min: 1, max: 20, default: 7, note: 'Guidance affects prompt strength on non-turbo models.' };
   const seed = { min: -1, max: 9999, default: -1, note: 'Seed is not hardware-limited. -1 means random; fixed numbers make tests repeatable.' };
 
   return {
@@ -369,7 +373,7 @@ function getAceHealth() {
         }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('ACE health check timed out')));
+    req.on('timeout', () => req.destroy(new Error('Local generator health check timed out')));
     req.on('error', (error) => resolve({ running: false, error: error.message || String(error) }));
     req.end();
   });
@@ -400,7 +404,7 @@ function handleAceLog(text) {
     addAceLog(line);
     if (/Uvicorn running|Application startup complete|models_initialized/i.test(line)) {
       aceState.status = 'running';
-      aceState.message = 'ACE server is running';
+      aceState.message = 'Local generator is running';
     }
   }
 }
@@ -439,6 +443,7 @@ function startRun(run) {
 
   const env = {
     ...process.env,
+    PROMPT2MIDI_ACE_STEP_TASK_TYPE: input.fullTrack ? 'cover' : (process.env.PROMPT2MIDI_ACE_STEP_TASK_TYPE || ''),
     PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH: String(input.referenceStrength),
     PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH: String(input.coverNoiseStrength),
     PROMPT2MIDI_ACE_STEP_STEPS: String(input.aceSteps),
@@ -450,24 +455,27 @@ function startRun(run) {
     PROMPT2MIDI_RUN_ID: run.id,
   };
 
-  updateRun(run, 'running', 5, 'Starting clean ACE proxy lane');
+  updateRun(run, 'running', 5, input.fullTrack ? 'Starting full-track generation lane' : 'Starting clean generation lane');
   addEvent(run, 'trace', `ui api pid ${process.pid}; started ${serverStartedAt}`);
   addEvent(run, 'trace', `run uuid ${run.id}`);
   addEvent(run, 'trace', `output dir ${input.outputDir}`);
-  addEvent(run, 'trace', `requested controls: similarity=${input.similarityLevel}; reference_guidance=${input.referenceStrength}; audio_start_amount=${input.coverNoiseStrength}; steps=${input.aceSteps}; guidance=${input.aceGuidance}; seed=${input.aceSeed}; ref_start=${input.referenceStart}s; duration=${input.duration}s; candidates=${input.candidates}`);
+  addEvent(run, 'trace', `requested controls: mode=${input.renderMode}; similarity=${input.similarityLevel}; reference_guidance=${input.referenceStrength}; audio_start_amount=${input.coverNoiseStrength}; steps=${input.aceSteps}; guidance=${input.aceGuidance}; seed=${input.aceSeed}; ref_start=${input.referenceStart}s; duration=${input.duration}; candidates=${input.candidates}`);
+  if (input.fullTrack) {
+    addEvent(run, 'trace', 'Full-track mode: one continuous render using the full reference duration; section stitching is not used.');
+  }
   if (run.downgradedUnsafeCloneControls) {
     addEvent(run, 'warning', 'Diagnostic was off but source controls were 1/1; downgraded to normal near-identical controls 0.42/0.20 to avoid an accidental clone.');
   }
   if (input.candidates > 1 && input.aceSeed >= 0) {
-    addEvent(run, 'warning', 'Fixed seed with multiple ACE cover candidates can repeat candidates; use seed -1 for varied candidates.');
+    addEvent(run, 'warning', 'Fixed seed with multiple candidates can repeat candidates; use seed -1 for varied candidates.');
   }
   addEvent(run, 'trace', input.reconstructionDiagnostic
-    ? 'Reconstruction diagnostic: enabled; Gemini disabled; ACE prompt uses minimal reconstruction wording'
+    ? 'Reconstruction diagnostic: enabled; Gemini disabled; generation prompt uses minimal reconstruction wording'
     : 'Reconstruction diagnostic: disabled');
   addEvent(run, 'trace', input.geminiControl
-    ? 'Gemini mode: brief + experimental ACE controls enabled'
+    ? 'Gemini mode: brief + experimental generation controls enabled'
     : input.geminiBrief
-      ? 'Gemini mode: smart ACE brief enabled'
+      ? 'Gemini mode: smart generation brief enabled'
       : 'Gemini mode: disabled');
   const layerTrace = requestedLayerTrace(input.prompt);
   if (layerTrace) addEvent(run, 'trace', layerTrace);
@@ -492,7 +500,7 @@ function startRun(run) {
     }
     if (code === 0) {
       updateRun(run, 'succeeded', 100, 'Done');
-      addEvent(run, 'done', 'Generated ACE candidates and Suno proxy package');
+      addEvent(run, 'done', 'Generated candidates and Suno proxy package');
     } else {
       failRun(run, `Pipeline exited with code ${code}`);
     }
@@ -523,15 +531,15 @@ function processOutputLine(run, rawLine) {
   if (line.startsWith('progress: ')) {
     const step = line.slice('progress: '.length);
     updateRun(run, 'running', progressFor(step, run.progress), step);
-    addEvent(run, 'progress', step);
+    addProgressEvent(run, step);
   } else if (/^[◆✓!]\s+/.test(line)) {
     const step = line.replace(/^[◆✓!]\s+/, '').trim();
     updateRun(run, 'running', progressFor(step, run.progress), step);
-    addEvent(run, 'progress', step);
+    addProgressEvent(run, step);
   } else if (line.startsWith('trace: ')) {
     addEvent(run, 'trace', line.slice('trace: '.length));
-  } else if (/ACE-Step API is not reachable/i.test(line)) {
-    updateRun(run, 'running', run.progress, 'Waiting for ACE server');
+  } else if (/local generator API is not reachable/i.test(line)) {
+    updateRun(run, 'running', run.progress, 'Waiting for local generator');
     addEvent(run, 'warning', line);
   } else if (/error|failed|traceback/i.test(line)) {
     addEvent(run, 'error', line);
@@ -562,7 +570,7 @@ function requestedLayerTrace(prompt) {
     layers.push('continuous fast tribal percussion');
   }
   if (!layers.length) return '';
-  return `requested layers detected: ${layers.join(', ')}; these are promoted into the ACE caption, but ACE may still ignore small layers`;
+  return `requested layers detected: ${layers.join(', ')}; these are promoted into the generation prompt, but the model may still ignore small layers`;
 }
 
 function truthyCheckbox(value) {
@@ -594,8 +602,18 @@ function collectFiles(run) {
     sunoUploadWav: exists(path.join(packageDir, 'suno-upload-proxy.wav')),
     sunoUploadMp3: exists(path.join(packageDir, 'suno-upload-proxy.mp3')),
     sunoPrompt: exists(path.join(packageDir, 'suno-proxy-prompt.md')),
+    sunoPromptText: readTextIfExists(path.join(packageDir, 'suno-proxy-prompt.md')),
   };
   collectDebugArtifacts(run, exportsDir);
+}
+
+function readTextIfExists(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    return null;
+  }
 }
 
 function collectDebugArtifacts(run, exportsDir) {
@@ -605,8 +623,8 @@ function collectDebugArtifacts(run, exportsDir) {
   if (!run.reportedArtifacts.effectivePrompt && fs.existsSync(promptPath)) {
     run.reportedArtifacts.effectivePrompt = true;
     const prompt = fs.readFileSync(promptPath, 'utf8').replace(/\s+/g, ' ').trim();
-    addEvent(run, 'trace', `effective ACE prompt: ${truncate(prompt, 900)}`);
-    addEvent(run, 'trace', `effective ACE prompt file: ${promptPath}`);
+    addEvent(run, 'trace', `effective generation prompt: ${truncate(prompt, 900)}`);
+    addEvent(run, 'trace', `effective generation prompt file: ${promptPath}`);
   }
 
   const manifestPath = path.join(exportsDir, 'candidate-manifest.json');
@@ -618,7 +636,7 @@ function collectDebugArtifacts(run, exportsDir) {
       addEvent(
         run,
         'trace',
-        `effective ACE controls: level=${sim.level || 'unknown'}; task=${sim.task_type || 'unknown'}; requested_similarity=${fmt(sim.target_similarity)}; effective_similarity=${fmt(sim.reference_similarity)}; reference_guidance=${fmt(sim.audio_cover_strength)}; audio_start_amount=${fmt(sim.cover_noise_strength)}; steps=${fmt(sim.inference_steps)}; guidance=${fmt(sim.guidance_scale)}; seed=${fmt(sim.seed)}; reconstruction_diagnostic=${sim.reconstruction_diagnostic === true ? 'on' : 'off'}`
+        `effective generation controls: level=${sim.level || 'unknown'}; task=${sim.task_type || 'unknown'}; requested_similarity=${fmt(sim.target_similarity)}; effective_similarity=${fmt(sim.reference_similarity)}; reference_guidance=${fmt(sim.audio_cover_strength)}; audio_start_amount=${fmt(sim.cover_noise_strength)}; steps=${fmt(sim.inference_steps)}; guidance=${fmt(sim.guidance_scale)}; seed=${fmt(sim.seed)}; reconstruction_diagnostic=${sim.reconstruction_diagnostic === true ? 'on' : 'off'}`
       );
       const candidates = Array.isArray(manifest.candidates) ? manifest.candidates : [];
       if (candidates.length) {
@@ -665,6 +683,33 @@ function addEvent(run, type, message) {
   const started = run.createdAt ? new Date(run.createdAt).getTime() : Date.now();
   run.events.push({ at, type, message, runId: run.id, elapsedMs: Math.max(0, Date.now() - started) });
   run.events = run.events.slice(-500);
+}
+
+function addProgressEvent(run, message) {
+  const key = canonicalProgress(message);
+  const last = run.events[run.events.length - 1];
+  const at = new Date().toISOString();
+  const started = run.createdAt ? new Date(run.createdAt).getTime() : Date.now();
+  const elapsedMs = Math.max(0, Date.now() - started);
+  if (last && last.type === 'progress' && last.key === key) {
+    const count = (last.count || 1) + 1;
+    run.events[run.events.length - 1] = {
+      ...last,
+      at,
+      elapsedMs,
+      count,
+      message: count > 1 ? `${message} (${count} updates)` : message,
+    };
+    return;
+  }
+  run.events.push({ at, type: 'progress', message, key, runId: run.id, elapsedMs, count: 1 });
+  run.events = run.events.slice(-500);
+}
+
+function canonicalProgress(message) {
+  const text = String(message || '');
+  if (/waiting for task/i.test(text)) return 'generation: waiting for task';
+  return text.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/ig, '<task>');
 }
 
 function failRun(run, message) {
@@ -855,7 +900,7 @@ function html() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ACE Proxy Pipeline</title>
+  <title>Inspiria</title>
   <style>
     :root {
       color-scheme: dark;
@@ -1078,6 +1123,7 @@ function html() {
     .ev-type.warning { color: var(--warn); }
     .ev-type.error { color: var(--bad); }
     .ev-type.trace { color: #38bdf8; }
+    .ev-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 48px; flex-shrink: 0; }
     .ev-msg { color: var(--muted-2); overflow-wrap: anywhere; }
     .ev-type.error { color: var(--bad); }
     .ev-type.warning { color: var(--warn); }
@@ -1103,7 +1149,7 @@ function html() {
       <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
     </svg>
   </div>
-  <h1>ACE Proxy Pipeline</h1>
+  <h1>Inspiria</h1>
   <div class="header-ace">
     <span id="aceStatus" class="pill" title="">...</span>
     <button id="aceStart" class="btn-ace" type="button">Start</button>
@@ -1136,6 +1182,14 @@ function html() {
 
     <div class="divider"></div>
 
+    <div class="field">
+      <label class="field-label" for="renderMode">Render mode</label>
+      <select id="renderMode">
+        <option value="full-track" selected>Full track — one coherent render</option>
+        <option value="sample">Short sample — calibration lane</option>
+      </select>
+    </div>
+
     <div class="row-2">
       <div>
         <label class="field-label" for="similarity">Similarity</label>
@@ -1152,7 +1206,7 @@ function html() {
 
     <div class="row-2" style="margin-top:10px">
       <div>
-        <label class="field-label" for="duration">Duration (s)</label>
+        <label class="field-label" for="duration">Duration</label>
         <input id="duration" type="number" min="10" max="45" step="1" value="30">
       </div>
       <div>
@@ -1213,7 +1267,7 @@ function html() {
           <div class="dz-hint" id="outDropHint">or type a name (saved inside tmp/)</div>
         </div>
       </div>
-      <input id="outputName" type="text" placeholder="optional, defaults to ace-ui-reference-date">
+      <input id="outputName" type="text" placeholder="optional, defaults to inspiria-reference-date">
     </div>
 
     <label class="check-row">
@@ -1223,14 +1277,14 @@ function html() {
 
     <label class="check-row">
       <input id="geminiBrief" type="checkbox">
-      <span>Gemini smart ACE brief</span>
+      <span>Gemini smart generation brief</span>
     </label>
 
     <label class="check-row">
       <input id="geminiControl" type="checkbox">
-      <span>Experimental: let Gemini suggest ACE controls</span>
+      <span>Experimental: let Gemini suggest generation controls</span>
     </label>
-    <p class="hint">Gemini uses local analysis + your direction to write a better ACE brief. Control mode is experimental and clamps suggestions to the safe slider ranges.</p>
+    <p class="hint">Gemini uses local analysis + your direction to write a better generation brief. Control mode is experimental and clamps suggestions to the safe slider ranges.</p>
 
     <div class="btn-row">
       <button class="btn-primary" id="run">Run Pipeline</button>
@@ -1239,9 +1293,9 @@ function html() {
 
     <label class="check-sm">
       <input id="autoStopAce" type="checkbox" checked>
-      <span>Stop UI-managed ACE server when this tab closes</span>
+      <span>Stop UI-managed generator when this tab closes</span>
     </label>
-    <p class="hint">Fast ACE proxy lane only &mdash; skips MIDI, stems, bass scaffolds, MusicGen, and arrangement generation.</p>
+    <p class="hint" id="modeHint">Full-track mode renders one continuous generated proxy at the reference duration. It skips section stitching and can take several minutes per candidate.</p>
   </div>
 </main>
 
@@ -1424,8 +1478,31 @@ document.getElementById('geminiControl').addEventListener('change', function() {
   if (this.checked) document.getElementById('geminiBrief').checked = true;
 });
 
+document.getElementById('renderMode').addEventListener('change', syncRenderMode);
+syncRenderMode();
+
+function syncRenderMode() {
+  var fullTrack = document.getElementById('renderMode').value === 'full-track';
+  var duration = document.getElementById('duration');
+  var referenceStart = document.getElementById('referenceStart');
+  duration.disabled = fullTrack;
+  referenceStart.disabled = fullTrack;
+  if (fullTrack) {
+    duration.value = '';
+    duration.placeholder = 'full reference';
+    document.getElementById('modeHint').textContent = 'Full-track mode renders one continuous generated proxy at the reference duration. It skips section stitching and can take several minutes per candidate.';
+    document.getElementById('run').textContent = 'Generate Full Track';
+  } else {
+    if (!duration.value) duration.value = '30';
+    duration.placeholder = '';
+    document.getElementById('modeHint').textContent = 'Short sample mode renders a selected reference window for fast generation calibration.';
+    document.getElementById('run').textContent = 'Run Pipeline';
+  }
+}
+
 // ── Reset ──
 document.getElementById('reset').addEventListener('click', function() {
+  document.getElementById('renderMode').value = 'full-track';
   document.getElementById('similarity').value = 'medium-high';
   document.getElementById('referenceStart').value = '8';
   document.getElementById('duration').value = '30';
@@ -1444,6 +1521,7 @@ document.getElementById('reset').addEventListener('click', function() {
   document.getElementById('geminiBrief').checked = false;
   document.getElementById('geminiControl').checked = false;
   document.getElementById('prompt').value = 'same tempo and key area as the reference.';
+  syncRenderMode();
 });
 
 // ── Run ──
@@ -1455,9 +1533,12 @@ document.getElementById('run').addEventListener('click', async function() {
   var payload = {
     reference: document.getElementById('reference').value,
     prompt: document.getElementById('prompt').value,
+    renderMode: document.getElementById('renderMode').value,
     similarityLevel: document.getElementById('similarity').value,
     referenceStart: Number(document.getElementById('referenceStart').value),
-    duration: Number(document.getElementById('duration').value),
+    duration: document.getElementById('renderMode').value === 'full-track'
+      ? null
+      : Number(document.getElementById('duration').value),
     candidates: Number(document.getElementById('candidates').value),
     referenceStrength: Number(document.getElementById('referenceStrength').value),
     coverNoiseStrength: Number(document.getElementById('coverNoiseStrength').value),
@@ -1487,7 +1568,7 @@ document.getElementById('run').addEventListener('click', async function() {
   }
 });
 
-// ── ACE controls ──
+// ── generator controls ──
 document.getElementById('aceStart').addEventListener('click', async function() {
   await fetch('/api/ace/start', { method: 'POST' }); pollAce();
 });
@@ -1504,7 +1585,7 @@ async function pollAce() {
   var pill = document.getElementById('aceStatus');
   pill.className = 'pill ' + (s.status || 'unknown');
   pill.textContent = String(s.status || 'unknown').toUpperCase();
-  pill.title = s.message || '';
+  pill.title = producerCopy(s.message || '');
 }
 
 // ── Poll + Render ──
@@ -1523,10 +1604,10 @@ async function poll() {
 function render(run) {
   document.getElementById('bar').style.width = (run.progress || 0) + '%';
   document.getElementById('percent').textContent = (run.progress || 0) + '%';
-  document.getElementById('step').textContent = run.step || run.status;
-  document.getElementById('error').textContent = run.error || '';
+  document.getElementById('step').textContent = producerCopy(run.step || run.status);
+  document.getElementById('error').textContent = producerCopy(run.error || '');
   document.getElementById('events').innerHTML = (run.events || []).slice().reverse().map(function(ev) {
-    return '<li><span class="ev-type ' + escapeHtml(ev.type) + '">' + escapeHtml(ev.type) + '</span><span class="ev-msg">' + escapeHtml(ev.message) + '</span></li>';
+    return '<li><span class="ev-type ' + escapeHtml(ev.type) + '">' + escapeHtml(ev.type) + '</span><span class="ev-time">' + escapeHtml(formatElapsed(ev.elapsedMs)) + '</span><span class="ev-msg">' + escapeHtml(producerCopy(ev.message)) + '</span></li>';
   }).join('');
   var files = run.files || {};
   var html = (files.candidates || []).map(function(file, i) {
@@ -1536,10 +1617,26 @@ function render(run) {
   document.getElementById('files').innerHTML = html;
 }
 
+function producerCopy(value) {
+  return String(value || '')
+    .replace(/ACE-Step/g, 'local generator')
+    .replace(/ace-step/gi, 'generation')
+    .replace(/\bACE\b/g, 'local generator');
+}
+
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, function(c) {
     return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
   });
+}
+
+function formatElapsed(ms) {
+  var value = Math.max(0, Number(ms || 0));
+  if (value < 1000) return value + 'ms';
+  var seconds = value / 1000;
+  if (seconds < 60) return seconds.toFixed(1) + 's';
+  var minutes = Math.floor(seconds / 60);
+  return minutes + 'm ' + (seconds - minutes * 60).toFixed(1) + 's';
 }
 
 // ── pagehide ──
@@ -1548,7 +1645,7 @@ window.addEventListener('pagehide', function() {
   if (navigator.sendBeacon) navigator.sendBeacon('/api/ace/stop', new Blob([JSON.stringify({ managedOnly: true })], { type: 'application/json' }));
 });
 
-// ── ACE status polling ──
+// ── generator status polling ──
 (function() {
   var start = ${autoStartAce ? "fetch('/api/ace/start', { method: 'POST' })" : "Promise.resolve()"};
   start.finally(function() {
@@ -1562,7 +1659,7 @@ window.addEventListener('pagehide', function() {
 }
 
 createApp().listen(port, '127.0.0.1', () => {
-  console.log(`ACE proxy UI running at http://127.0.0.1:${port}`);
+  console.log(`Inspiria UI running at http://127.0.0.1:${port}`);
   if (autoStartAce) {
     startAceServer().catch((error) => {
       aceState.status = 'failed';
@@ -1570,7 +1667,7 @@ createApp().listen(port, '127.0.0.1', () => {
     });
   } else {
     aceState.status = 'stopped';
-    aceState.message = 'ACE auto-start disabled; start scripts/start-ace-step-model-api.sh in another terminal.';
+    aceState.message = 'Auto-start disabled; start the local generator in another terminal.';
   }
 });
 

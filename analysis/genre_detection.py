@@ -7,6 +7,7 @@ Fallback: unavailable stub when torch/transformers are absent or disabled.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 
 _GENRE_LABELS = [
     # Electronic / dance
@@ -39,41 +40,53 @@ _SAMPLE_RATE = 48000
 _WINDOW_SECONDS = 30
 
 
-def detect_genre(audio_path: str) -> dict:
+ProgressCallback = Callable[[str], None]
+
+
+def detect_genre(audio_path: str, progress: ProgressCallback | None = None) -> dict:
     """Detect the genre/style of a music track.
 
     Returns a dict with keys: primary, top3, confidence, method, tags.
     Falls back to the unavailable stub when CLAP is disabled or unloadable.
     """
     if os.environ.get("PROMPT2MIDI_DISABLE_GENRE") == "1":
+        _emit(progress, "deep analysis: genre classifier disabled; using heuristic genre")
         return _FALLBACK.copy()
 
     try:
+        _emit(progress, "deep analysis: importing genre classifier dependencies")
         import numpy as np
         import librosa
         import torch
         from transformers import ClapModel, ClapProcessor
     except ImportError:
+        _emit(progress, "deep analysis: genre classifier unavailable; using heuristic genre")
         return _FALLBACK.copy()
 
     try:
+        _emit(progress, "deep analysis: preparing genre classifier audio window")
         audio_array, _ = librosa.load(audio_path, sr=_SAMPLE_RATE, mono=True)
     except Exception:
+        _emit(progress, "deep analysis: genre classifier audio prep failed; using heuristic genre")
         return _FALLBACK.copy()
 
     if audio_array is None or len(audio_array) == 0:
+        _emit(progress, "deep analysis: genre classifier received empty audio; using heuristic genre")
         return _FALLBACK.copy()
 
     audio_array = _extract_window(audio_array, _SAMPLE_RATE, _WINDOW_SECONDS)
 
     try:
+        _emit(progress, "deep analysis: loading CLAP genre model from Hugging Face cache")
         processor = ClapProcessor.from_pretrained(_CLAP_MODEL_ID)
         model = ClapModel.from_pretrained(_CLAP_MODEL_ID)
         model.eval()
     except Exception:
+        _emit(progress, "deep analysis: CLAP genre model unavailable; using heuristic genre")
         return _FALLBACK.copy()
 
     try:
+        _emit(progress, "deep analysis: running CLAP genre classifier")
         inputs = processor(
             text=_GENRE_LABELS,
             audio=audio_array,
@@ -110,7 +123,13 @@ def detect_genre(audio_path: str) -> dict:
         }
 
     except Exception:
+        _emit(progress, "deep analysis: genre classifier inference failed; using heuristic genre")
         return _FALLBACK.copy()
+
+
+def _emit(progress: ProgressCallback | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
 
 
 def _extract_window(

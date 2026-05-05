@@ -29,8 +29,8 @@ const statusClass = computed(() => ({
     </div>
 
     <div>
-      <h1 class="text-base font-bold tracking-tight leading-none">Inspired</h1>
-      <p class="text-[10px] text-muted-foreground leading-none mt-0.5">Reference-driven track clone</p>
+      <h1 class="text-base font-bold tracking-tight leading-none">Inspiria</h1>
+      <p class="text-[10px] text-muted-foreground leading-none mt-0.5">Reference-inspired track generation</p>
     </div>
 
     <div class="ml-auto flex items-center gap-2">

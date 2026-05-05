@@ -12,6 +12,8 @@ _FALLBACK: dict = {
     "swing": 0.0,
     "density": "medium",
     "tempo_feel": "balanced",
+    "percussion_character": "unknown",
+    "hits_per_bar": 0.0,
     "method": "unavailable",
 }
 
@@ -46,10 +48,21 @@ def analyze_drums(drum_stem_path: str, bpm: float) -> dict:
         kick_pos = _quantize_to_grid(kick_times, sixteenth)
         snare_pos = _quantize_to_grid(snare_times, sixteenth)
         hat_pos = _quantize_to_grid(hat_times, sixteenth)
+        onset_rates = {
+            "kick": len(kick_times) / bars,
+            "snare_mid": len(snare_times) / bars,
+            "hat_high": len(hat_times) / bars,
+        }
+        energy = {
+            "kick": _rms(kick_band),
+            "snare_mid": _rms(snare_band),
+            "hat_high": _rms(hat_band),
+        }
 
         swing = _estimate_swing(hat_times, sixteenth)
-        density = _classify_density(kick_pos, snare_pos, hat_pos, bars)
+        density = _classify_density(onset_rates)
         tempo_feel = _classify_tempo_feel(hat_times, sixteenth)
+        percussion_character = _classify_percussion_character(onset_rates, energy, density)
 
         return {
             "kick": kick_pos,
@@ -58,6 +71,9 @@ def analyze_drums(drum_stem_path: str, bpm: float) -> dict:
             "swing": round(swing, 3),
             "density": density,
             "tempo_feel": tempo_feel,
+            "percussion_character": percussion_character,
+            "hits_per_bar": round(sum(onset_rates.values()), 2),
+            "onsets_per_bar": {key: round(value, 2) for key, value in onset_rates.items()},
             "method": "onset_detection",
         }
 
@@ -131,14 +147,34 @@ def _estimate_swing(hat_times, sixteenth: float) -> float:
     return swing
 
 
-def _classify_density(kick_pos: list[int], snare_pos: list[int], hat_pos: list[int], bars: float) -> str:
-    total_hits = len(kick_pos) + len(snare_pos) + len(hat_pos)
-    hits_per_bar = total_hits / max(1.0, bars)
-    if hits_per_bar < 6:
+def _rms(y) -> float:
+    import numpy as np
+
+    return float(np.sqrt(np.mean(y * y))) if len(y) else 0.0
+
+
+def _classify_density(onset_rates: dict[str, float]) -> str:
+    hits_per_bar = sum(onset_rates.values())
+    if hits_per_bar < 5:
         return "sparse"
-    if hits_per_bar > 14:
+    if hits_per_bar >= 18:
         return "dense"
     return "medium"
+
+
+def _classify_percussion_character(onset_rates: dict[str, float], energy: dict[str, float], density: str) -> str:
+    mid = onset_rates.get("snare_mid", 0.0)
+    high = onset_rates.get("hat_high", 0.0)
+    kick = onset_rates.get("kick", 0.0)
+    mid_high_energy = energy.get("snare_mid", 0.0) + energy.get("hat_high", 0.0)
+    kick_energy = max(0.001, energy.get("kick", 0.0))
+    if density == "dense" and mid + high >= 10.0 and mid_high_energy / kick_energy >= 0.35:
+        return "tribal_percussion"
+    if high >= 8.0 and density in {"medium", "dense"}:
+        return "hat_shaker_driven"
+    if kick >= 6.0 and density != "dense":
+        return "kick_led"
+    return "balanced_drums"
 
 
 def _classify_tempo_feel(hat_times, sixteenth: float) -> str:

@@ -5,7 +5,7 @@ status: active
 repo_ids: [prompt2midi]
 related_domain_slugs: [local-orchestration, audio-analysis, llm-midi-generation]
 created_at: 2026-04-28
-updated_at: 2026-04-28
+updated_at: 2026-05-05
 ---
 
 # juce-plugin
@@ -20,6 +20,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - `Prompt2midiAudioProcessor` is intentionally pass-through audio processing for the MVP.
 - `Prompt2midiAudioProcessorEditor` owns WAV/MP3 choose/drop, prompt input, async local API polling, result display, and copy prompt.
 - `LocalApiClient.h` labels MIDI assets by confidence level and limitations: reference sketch is generated, model MIDI is Basic Pitch output, stem-aware bass is Demucs plus Basic Pitch, and heuristic bass is full-mix tracking.
+- `LocalApiClient.h` summarizes Full Arrangement / Arrangement Lock status, confidence, review summary, and paths for `arrangement-map.json`, `arrangement-lock-report.json`, `structure-debug.json`, `analysis-report.md`, `suno-structure-prompt.md`, and `full-arrangement-guide.mid`.
 - The plugin should call a local API for long-running work rather than doing analysis inside the plugin.
 - Keep host/audio-thread stability as the primary invariant.
 
@@ -34,6 +35,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - Plugin submits local file paths/prompts to the local orchestrator.
 - Plugin polls or subscribes to job progress rather than blocking.
 - Plugin displays structured JSON fields, generated text/assets, analysis warnings, and `midi_assets` metadata from Node.
+- Plugin must treat low-confidence Arrangement Lock maps as review-needed before full ACE rendering.
 - Plugin output copy must not imply full transcription accuracy unless the backend exposes a source-aware extraction result.
 - Do not require cloud credentials in the plugin for the core path.
 

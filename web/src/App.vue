@@ -28,7 +28,7 @@ function onPageHide() {
   }
 }
 
-// Pause ACE polling when tab is hidden, resume when visible (fix #8)
+// Pause generator polling when tab is hidden, resume when visible (fix #8)
 function onVisibilityChange() {
   if (document.hidden) {
     clearInterval(aceInterval)
@@ -45,7 +45,7 @@ watch(() => run.isDone, (done) => {
   if (run.runError) {
     toast.error('Pipeline failed', run.runError)
   } else {
-    toast.success('Clone ready', 'Open Logs to listen to your tracks.')
+    toast.success('Track ready', 'Open Logs to listen to your generated tracks.')
   }
 })
 

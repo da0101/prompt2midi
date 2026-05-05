@@ -10,6 +10,8 @@
     "setup:stems": "bash scripts/setup-stem-engine.sh",
     "setup:transcription": "bash scripts/setup-transcription-engine.sh",
     "setup:ace-step": "bash scripts/setup-ace-step-engine.sh",
+    "setup:allin1-docker": "docker compose build allin1-worker",
+    "allin1:docker": "bash scripts/run-allin1-docker.sh",
     "ace-step:start": "bash scripts/start-ace-step-api.sh",
     "dev:web": "bash scripts/launchers/start-web-ui.sh",
     "dev:api": "bash scripts/launchers/start-ace-proxy-api.sh",

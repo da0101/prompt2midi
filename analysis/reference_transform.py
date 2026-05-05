@@ -199,6 +199,9 @@ def build_reference_transform(user_prompt: str, analysis: dict) -> dict:
         "drums": {
             "keep_kick_rhythm": groove_similarity >= 0.78,
             "keep_hat_percussion_feel": groove_similarity >= 0.72,
+            "percussion_character": drums.get("percussion_character"),
+            "density": drums.get("density"),
+            "hits_per_bar": drums.get("hits_per_bar"),
             "source": "drum_stem" if (analysis.get("stem_separation") or {}).get("paths", {}).get("drums") else "full_mix_fingerprint",
         },
         "stab_replacement": stab,
@@ -626,6 +629,10 @@ def _prompt(
     if bass_transcription.get("event_count"):
         parts.append(f"use extracted bass MIDI contour as reference with {bass_transcription['event_count']} events")
     if drums.get("method") not in (None, "unavailable"):
+        if drums.get("percussion_character") == "tribal_percussion":
+            parts.append(
+                "preserve the extracted tribal percussion character: dense conga/bongo/shaker-style 16th-note movement over the kick"
+            )
         parts.append(f"use extracted drum groove from {drums.get('method')}")
     if vocal_mode["preserve_role"]:
         parts.append(vocal_mode["description"])
@@ -670,6 +677,9 @@ def _harmonic_policy(style: dict, analysis: dict) -> dict:
 
 def _corrected_key_area(analysis: dict) -> str:
     key = str((analysis or {}).get("key") or "").strip()
+    key_confidence = float((analysis or {}).get("key_confidence") or 0.0)
+    if key and key.lower() != "unknown" and key_confidence >= 0.5:
+        return key
     chords = (analysis or {}).get("chords") or {}
     progression = [str(chord).strip() for chord in (chords.get("progression") or []) if str(chord).strip()]
     chord_confidence = float(chords.get("confidence") or 0.0)
@@ -758,7 +768,7 @@ def _rich_reference_policy(analysis: dict, style: dict, vocal_mode: dict, groove
         "enabled": True,
         "reason": ", ".join(reasons) or "dense reference",
         "generation_rule": (
-            "rich-reference proxy: build a complete clean proxy section with drums, bass, claps, hats, percussion fills, "
+            "rich-reference safety proxy: build a complete clean proxy section with drums, bass, claps, hats, percussion fills, "
             "dramatic stabs, layered keys or comping, call-response hook energy, and optional stable new vocal phrases; "
             "preserve role balance and arrangement feel without copying lyrics, melody, singer identity, or the master recording"
         ),

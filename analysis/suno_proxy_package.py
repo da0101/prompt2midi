@@ -21,7 +21,7 @@ def prepare_suno_proxy_package(
     proxy_audio: str,
     output_dir: str,
     user_prompt: str = "",
-    upload_duration: float = 30.0,
+    upload_duration: float | str = 30.0,
     start_seconds: float | None = None,
 ) -> dict:
     """Analyze a local reference but package only a generated proxy demo for Suno."""
@@ -97,18 +97,32 @@ def prepare_suno_proxy_package(
 def render_suno_proxy_prompt(analysis: dict, section: dict, safe_user_prompt: str = "") -> str:
     bpm = _fmt_number(analysis.get("bpm"), "same tempo area as proxy")
     key = analysis.get("key") or "same key area as the proxy demo"
+    genre = _genre_text(analysis.get("genre") or {})
     groove = _groove_text(analysis)
+    vocal_role = (analysis.get("vocal_role") or {}).get("summary") or "instrumental or minimal hook role"
+    reference_groove = analysis.get("reference_groove") or {}
+    kick_grid = reference_groove.get("kick_pattern_16th") or "steady club kick pulse"
+    bass_grid = reference_groove.get("bass_accent_pattern_16th") or "syncopated rolling bass accents"
+    hat_grid = reference_groove.get("hat_pattern_16th") or "driving hats and percussion"
+    low_end = reference_groove.get("low_end_weight") or "heavy but controlled"
+    cleaned_user_prompt = safe_user_prompt.strip().rstrip(".")
+    user_direction = f" User direction: {cleaned_user_prompt}." if cleaned_user_prompt else ""
     prompt = (
-        "Use the uploaded generated proxy demo as the seed for a new original finished song, not a cover. "
-        f"Preserve the proxy's arrangement, funky pocket, rhythmic drive, heavy syncopated bass, {bpm} BPM pulse, and {key} key area. "
-        "Polish the mix and transitions without replacing the core groove. "
-        "If vocals are present, keep only the role and energy; use new lyrics, voice, melody, and hook contour. "
-        "Do not imitate any famous artist, singer, recording, lyric, hook, or melody. "
-        "Avoid unrelated layers, glitches, alien sounds, off-scale notes, weak bass, cheesy additions, and noisy transitions. "
-        f"Groove: {groove}. "
-        f"{safe_user_prompt.strip()}"
+        "Use the uploaded generated proxy demo as the audio seed for a new original finished SUNO track, not as a cover and not as a request to copy the source reference. "
+        "Do not imitate any famous artist, singer, recording, lyric, hook, melody, or exact sample. "
+        "Avoid unrelated layers, sudden genre changes, novelty instruments, cheesy EDM supersaws, random cinematic layers, off-scale notes, glitch noise, thin bass, loose timing, over-bright harshness, and messy transitions. "
+        f"{user_direction} "
+        f"Preserve the proxy's arrangement, full-song shape, DJ-friendly continuity, extended intro-to-groove-to-outro flow, {bpm} BPM pulse, {key} key area, and {genre} identity. "
+        f"The core feel is {groove}; keep that pocket while making the musical material more polished, finished, and release-ready. "
+        "Build around a consistent underground club mix identity: one coherent drum kit, one coherent bass tone, one coherent percussion palette, stable ambience, and clean transitions across the whole track. "
+        f"Keep the kick behavior close to this grid feel: {kick_grid}. Keep the bass pressure and accent behavior close to this feel: {bass_grid}. Keep the hat/percussion motion close to this feel: {hat_grid}. "
+        f"The low end should remain {low_end}, tight, warm, rounded, and club-weighted without masking the kick. "
+        "Preserve the proxy's rhythmic drive, bass pressure, energy arc, breakdown/build/re-entry logic, stereo space, and movement, but replace any weak, noisy, random, or unfinished details with cleaner production. "
+        "Add tasteful variation over time: subtle drum fills, percussion call-and-response, filtered transitions, risers, drops, mutes, return hits, and evolving ambience, while keeping the groove hypnotic and continuous. "
+        f"Vocal or hook role target: {vocal_role}. If vocals or vocal textures appear, use only the role and energy; create new lyrics, new voice, new melody, and new hook contour. "
+        "Finish it as an original professional club track that sounds inspired by the uploaded proxy's structure and groove, with stronger mix polish and musical development."
     )
-    return _limit_prompt(prompt, 1000)
+    return _limit_prompt(prompt, 2000)
 
 
 def render_suno_proxy_report(analysis: dict, section: dict, safe_user_prompt: str = "") -> str:
@@ -157,14 +171,18 @@ def render_proxy_usage_instructions(section: dict) -> str:
     )
 
 
-def _choose_proxy_section(duration: float, upload_duration: float, start_seconds: float | None) -> dict:
-    window = max(6.0, min(60.0, upload_duration, duration))
+def _choose_proxy_section(duration: float, upload_duration: float | str, start_seconds: float | None) -> dict:
+    full_upload = str(upload_duration).strip().lower() in {"full", "reference", "track", "source"}
+    if full_upload:
+        window = duration
+    else:
+        window = max(6.0, min(60.0, float(upload_duration), duration))
     start = 0.0 if start_seconds is None else max(0.0, min(float(start_seconds), max(0.0, duration - window)))
     return {
         "start_seconds": round(start, 3),
         "end_seconds": round(start + window, 3),
         "duration_seconds": round(window, 3),
-        "method": "proxy_user_selected" if start_seconds is not None else "proxy_start",
+        "method": "proxy_full_track" if full_upload else ("proxy_user_selected" if start_seconds is not None else "proxy_start"),
     }
 
 
@@ -283,7 +301,7 @@ def main() -> int:
     parser.add_argument("--proxy-audio", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--prompt", default="")
-    parser.add_argument("--duration", type=float, default=30.0)
+    parser.add_argument("--duration", default="30")
     parser.add_argument("--start", type=float)
     args = parser.parse_args()
     try:

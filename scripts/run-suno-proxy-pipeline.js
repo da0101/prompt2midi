@@ -173,7 +173,7 @@ async function buildGeminiBrief({ generationReference, runDir, prompt, level, du
       analysis: runOutput.analysis || {},
       userPrompt: prompt,
       similarityLevel: level,
-      duration: Number.parseFloat(duration),
+      duration: numericDuration(duration),
       referenceStart: args.referenceStart ? Number.parseFloat(args.referenceStart) : null,
       vocals: Boolean(args.vocals),
       controls: {
@@ -194,6 +194,11 @@ function mergeGeminiPrompt(userPrompt, geminiBrief) {
   if (!brief) return base;
   if (!base) return `Gemini producer brief for ACE: ${brief}`;
   return `${base}. Gemini producer brief for ACE: ${brief}`;
+}
+
+function numericDuration(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function chooseProxyAudio(runDir, explicitCandidate) {
@@ -325,7 +330,7 @@ Flow:
 Options:
   --prompt <text>               Copyright-safe style direction.
   --similarity-level <level>    Defaults to medium-high for close but copyright-safer proxy demos.
-  --duration <seconds>          Defaults to 30.
+  --duration <seconds|full>     Defaults to 30; use full for one continuous reference-length render/package.
   --candidates <n>              Defaults to 4.
   --pack-candidate <n>          Package a specific candidate after generation.
   --vocals                      Ask ACE for a new vocal hook; default is instrumental proxy for stability.

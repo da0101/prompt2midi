@@ -29,9 +29,10 @@ async function main() {
   if (!fs.existsSync(reference)) return fail(`Reference file does not exist: ${reference}`);
   if (!fs.existsSync(proxyAudio)) return fail(`Proxy audio file does not exist: ${proxyAudio}`);
 
-  const durationNumber = Number.parseFloat(duration);
-  if (!Number.isFinite(durationNumber) || durationNumber < 6 || durationNumber > 60) {
-    return fail('--duration must be a number between 6 and 60 seconds.');
+  const fullDuration = ['full', 'reference', 'track', 'source'].includes(String(duration).trim().toLowerCase());
+  const durationNumber = fullDuration ? null : Number.parseFloat(duration);
+  if (!fullDuration && (!Number.isFinite(durationNumber) || durationNumber < 6 || durationNumber > 60)) {
+    return fail('--duration must be a number between 6 and 60 seconds, or full.');
   }
   if (start !== undefined) {
     const startNumber = Number.parseFloat(start);
@@ -47,7 +48,7 @@ async function main() {
     '--output-dir',
     path.resolve(outputDir),
     '--duration',
-    String(durationNumber),
+    fullDuration ? 'full' : String(durationNumber),
   ];
   if (prompt) childArgs.push('--prompt', prompt);
   if (start !== undefined) childArgs.push('--start', String(Number.parseFloat(start)));
@@ -105,7 +106,7 @@ Meaning:
   --proxy-audio   Newly generated proxy demo. This is the only audio prepared for Suno upload.
   --output-dir    Folder where the Suno proxy package will be written.
   --prompt        Optional copyright-safe direction for Suno.
-  --duration      Upload clip length, 6-60 seconds; default 30.
+  --duration      Upload clip length, 6-60 seconds, or full for the full proxy track; default 30.
   --start         Optional manual start time inside the proxy audio.
 
 Output:

@@ -9,10 +9,40 @@ const analyzeScript = path.join(repoRoot, 'analysis', 'analyze.py');
 const ANALYSIS_PYTHON = process.env.PROMPT2MIDI_ANALYSIS_PYTHON || 'python3';
 const LEVELS = new Set(['low', 'medium-low', 'medium', 'medium-high', 'high', 'very-high', 'near-identical', 'identical']);
 
+const STEP_PROGRESS = [
+  [/preparing reference audio/i, 4],
+  [/reading audio|feature extraction/i, 8],
+  [/enhanced analysis/i, 14],
+  [/external analysis/i, 20],
+  [/beat grid/i, 24],
+  [/loading CLAP genre model|Hugging Face cache/i, 31],
+  [/running CLAP genre classifier/i, 32],
+  [/detecting chord progression/i, 34],
+  [/detecting arrangement structure/i, 35],
+  [/deep analysis|detecting genre|chords|structure/i, 30],
+  [/midi sketch/i, 36],
+  [/heuristic bass|reference groove/i, 42],
+  [/stem separation/i, 50],
+  [/model transcription/i, 58],
+  [/reference transform/i, 64],
+  [/composition/i, 70],
+  [/full arrangement: writing/i, 74],
+  [/full arrangement guide: rendering section/i, 76],
+  [/ace-step: effective controls/i, 78],
+  [/ace-step: submitting/i, 80],
+  [/ace-step: waiting/i, 84],
+  [/ace-step: downloading candidate/i, 88],
+  [/ace-step: scoring candidate/i, 91],
+  [/audio generation/i, 94],
+];
+
 function makeProgressRenderer() {
   const isTTY = Boolean(process.stderr.isTTY);
   const machineReadable = process.env.PROMPT2MIDI_TRACE_PROGRESS === '1';
-  const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const animationMs = Math.max(120, Number.parseInt(process.env.PROMPT2MIDI_PROGRESS_ANIMATION_MS || '250', 10));
+  const waitAnimationMs = Math.max(1000, Number.parseInt(process.env.PROMPT2MIDI_PROGRESS_WAIT_ANIMATION_MS || '5000', 10));
+  const heartbeatMs = Math.max(5000, Number.parseInt(process.env.PROMPT2MIDI_PROGRESS_HEARTBEAT_MS || '15000', 10));
 
   // ANSI helpers — empty strings when not a TTY so plain text still works
   const C = isTTY
@@ -31,44 +61,207 @@ function makeProgressRenderer() {
     return C.cyan;
   }
 
-  let frame = 0;
-  let current = '';
-  let color = C.cyan;
+  const startedAt = Date.now();
+  const records = [];
+  let current = null;
   let timer = null;
+  let heartbeatTimer = null;
+  let percent = 0;
+  const allowAnimation = isTTY
+    && process.env.PROMPT2MIDI_PROGRESS_ANIMATION !== '0'
+    && !process.env.CI
+    && !process.env.TERM_PROGRAM?.toLowerCase().includes('dumb');
 
   function clearLine() { process.stderr.write('\r\x1b[2K'); }
 
-  function tick() {
-    frame++;
-    process.stderr.write(`\r\x1b[2K${color}${FRAMES[frame % FRAMES.length]}${C.reset} ${current}`);
+  function elapsedMs() {
+    return Date.now() - startedAt;
   }
 
-  // Begin a new step — completes the previous one as ✓
+  function fmtMs(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${(seconds - minutes * 60).toFixed(1)}s`;
+  }
+
+  function timestamp() {
+    return new Date().toLocaleTimeString();
+  }
+
+  function progressFor(text) {
+    const section = text.match(/full arrangement guide: rendering section\s+(\d+)\/(\d+)/i);
+    if (section) {
+      const index = Number.parseInt(section[1], 10);
+      const total = Math.max(1, Number.parseInt(section[2], 10));
+      return Math.max(percent, Math.min(92, 76 + ((index - 1) / total) * 16));
+    }
+    const candidate = text.match(/candidate\s+(\d+)/i);
+    if (candidate && /ace-step/i.test(text)) {
+      const index = Number.parseInt(candidate[1], 10);
+      return Math.max(percent, Math.min(93, 86 + index * 2));
+    }
+    for (const [pattern, value] of STEP_PROGRESS) {
+      if (pattern.test(text)) return Math.max(percent, value);
+    }
+    if (/waiting for task/i.test(text)) return Math.min(88, Math.max(percent, percent + 0.5));
+    return Math.min(96, Math.max(percent, percent + 2));
+  }
+
+  function bar(value, frame = null) {
+    const width = 20;
+    const filled = Math.max(0, Math.min(width, Math.round((value / 100) * width)));
+    const empty = width - filled;
+    const pulse = frame === null || empty <= 0 ? -1 : filled + (frame % empty);
+    let cells = '';
+    for (let i = 0; i < width; i += 1) {
+      if (i < filled) cells += `${C.green}█${C.reset}`;
+      else if (i === pulse) cells += `${C.cyan}●${C.reset}`;
+      else cells += `${C.dim}░${C.reset}`;
+    }
+    return `${C.dim}[${C.reset}${cells}${C.dim}]${C.reset}`;
+  }
+
+  function canonical(text) {
+    if (/ace-step: waiting for task/i.test(text)) return 'ace-step: waiting for task';
+    return text.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/ig, '<task>');
+  }
+
+  function currentLabel() {
+    if (!current) return '';
+    if (/ace-step: waiting for task/i.test(current.text) && current.updates > 1) {
+      const match = current.text.match(/task\s+([0-9a-f-]+)/i);
+      const task = match ? ` ${match[1].slice(0, 8)}` : '';
+      return `ace-step: waiting for task${task} (${current.updates} polls)`;
+    }
+    return current.text;
+  }
+
+  function truncate(text, maxLength) {
+    const value = String(text || '');
+    if (value.length <= maxLength) return value;
+    return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+  }
+
+  function liveLine() {
+    if (!current) return;
+    const elapsed = fmtMs(Date.now() - current.startedAt);
+    const columns = Math.max(60, Number(process.stderr.columns || 100));
+    const fixedWidth = 52;
+    const label = truncate(currentLabel(), Math.max(24, columns - fixedWidth));
+    const icon = `${C.cyan}${frames[current.frame % frames.length]}${C.reset}`;
+    return formatLine(icon, percent, elapsed, label, current.frame);
+  }
+
+  function formatLine(icon, value, elapsed, label, frame = null) {
+    const pct = `${String(Math.round(value)).padStart(3)}%`;
+    const time = String(elapsed || '').padStart(8);
+    return `${icon} ${bar(value, frame)} ${pct} ${C.dim}${time}${C.reset}  ${label}`;
+  }
+
+  function renderCurrent() {
+    if (!current) return;
+    const elapsed = fmtMs(Date.now() - current.startedAt);
+    if (!isTTY) {
+      process.stderr.write(`${formatLine('⠋', percent, elapsed, currentLabel())}\n`);
+      return;
+    }
+    clearLine();
+    process.stderr.write(liveLine());
+  }
+
+  function startAnimation() {
+    if (!allowAnimation || timer) {
+      startHeartbeat();
+      return;
+    }
+    const intervalMs = /ace-step: waiting for task/i.test(current?.text || '') ? waitAnimationMs : animationMs;
+    timer = setInterval(() => {
+      if (!current) return;
+      current.frame += 1;
+      renderCurrent();
+    }, intervalMs);
+  }
+
+  function stopAnimation() {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }
+
+  function startHeartbeat() {
+    if (isTTY || heartbeatTimer || process.env.PROMPT2MIDI_PROGRESS_HEARTBEAT === '0') return;
+    heartbeatTimer = setInterval(() => {
+      if (!current) return;
+      current.frame += 1;
+      process.stderr.write(`${formatLine(frames[current.frame % frames.length], percent, fmtMs(Date.now() - current.startedAt), currentLabel(), current.frame)}\n`);
+    }, heartbeatMs);
+  }
+
+  function stopHeartbeat() {
+    if (!heartbeatTimer) return;
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  function finishCurrent(success = true) {
+    if (!current || !isTTY) return;
+    const icon = success ? `${C.green}✓${C.reset}` : `${C.yellow}!${C.reset}`;
+    const elapsed = fmtMs(Date.now() - current.startedAt);
+    const columns = Math.max(60, Number(process.stderr.columns || 100));
+    const label = truncate(currentLabel(), Math.max(24, columns - 52));
+    process.stderr.write(
+      `\r\x1b[2K${formatLine(icon, percent, elapsed, label)}\n`
+    );
+  }
+
+  // Begin a new step. Rendering is event-driven, with no animation loop, so terminals
+  // that preserve carriage returns do not fill with high-frequency spinner frames.
   function step(text) {
-    done(true);
     if (machineReadable) {
       process.stderr.write(`progress: ${text}\n`);
       return;
     }
-    current = text;
-    color = stepColor(text);
-    if (isTTY) {
-      tick();
-      timer = setInterval(tick, 80);
-    } else {
-      process.stderr.write(`  ◆ ${text}\n`);
+    const nextPercent = progressFor(text);
+    const key = canonical(text);
+    if (current && current.key === key) {
+      current.text = text;
+      current.updates += 1;
+      percent = Math.max(percent, nextPercent);
+      return;
     }
+    done(true);
+    percent = Math.max(percent, nextPercent);
+    current = {
+      key,
+      text,
+      startedAt: Date.now(),
+      at: timestamp(),
+      color: stepColor(text),
+      updates: 1,
+      percent,
+      frame: 0,
+    };
+    renderCurrent();
+    startAnimation();
   }
 
   // Mark the current step done (✓ green or ✗ red)
   function done(success = true) {
-    if (timer) { clearInterval(timer); timer = null; }
     if (!current) return;
-    if (isTTY) {
-      const icon = success ? `${C.green}✓${C.reset}` : `${C.yellow}!${C.reset}`;
-      process.stderr.write(`\r\x1b[2K${icon} ${C.dim}${current}${C.reset}\n`);
-    }
-    current = '';
+    stopAnimation();
+    stopHeartbeat();
+    const durationMs = Date.now() - current.startedAt;
+    records.push({
+      label: currentLabel(),
+      started_at: current.at,
+      duration_ms: durationMs,
+      percent: Math.round(percent),
+      success,
+    });
+    finishCurrent(success);
+    current = null;
   }
 
   function warn(line) {
@@ -86,7 +279,29 @@ function makeProgressRenderer() {
     process.stderr.write(`     ${line}\n`);
   }
 
-  return { step, done, warn, error, other };
+  function summary(outputDir) {
+    done(true);
+    const totalMs = elapsedMs();
+    const summaryPath = path.join(outputDir, 'pipeline-timings.json');
+    const payload = {
+      started_at: new Date(startedAt).toISOString(),
+      finished_at: new Date().toISOString(),
+      total_ms: totalMs,
+      steps: records,
+    };
+    try {
+      require('node:fs').writeFileSync(summaryPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+    } catch (_) {}
+    process.stderr.write(`\n${C.bold}Performance summary${C.reset} ${C.dim}(timings saved to ${summaryPath})${C.reset}\n`);
+    process.stderr.write(`${C.green}${bar(100)} 100%${C.reset} total ${C.bold}${fmtMs(totalMs)}${C.reset}\n`);
+    for (const record of records) {
+      process.stderr.write(
+        `  ${String(record.percent).padStart(3)}%  ${record.started_at}  ${fmtMs(record.duration_ms).padStart(8)}  ${record.label}\n`
+      );
+    }
+  }
+
+  return { step, done, warn, error, other, summary };
 }
 
 
@@ -102,6 +317,7 @@ async function main() {
   const prompt = args.prompt || '';
   const level = args.similarityLevel || args.level || '';
   const fastSample = Boolean(args.fastSample || args.fast);
+  const fullArrangement = Boolean(args.fullArrangement || args.arrangementLock || args.fullGuide);
 
   if (!reference || !outputDir) {
     printHelp();
@@ -127,6 +343,15 @@ async function main() {
   const env = { ...process.env };
   if (level) env.PROMPT2MIDI_REFERENCE_SIMILARITY_LEVEL = level;
   if (args.ace || args.enableAceStep) env.PROMPT2MIDI_ENABLE_ACE_STEP = '1';
+  if (fullArrangement) {
+    env.PROMPT2MIDI_ENABLE_ACE_STEP = '1';
+    env.PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE = '1';
+    env.PROMPT2MIDI_SKIP_REFERENCE_SAMPLE = '1';
+    if (!env.PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL) {
+      env.PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL = 'medium-low';
+    }
+  }
+  if (args.allin1Docker) env.PROMPT2MIDI_ENABLE_ALLIN1_DOCKER = '1';
   if (args.vocals && args.instrumental) {
     return fail('Use either --vocals or --instrumental, not both.');
   }
@@ -205,6 +430,7 @@ async function main() {
       if (stdoutBuf.trim()) {
         try { fs.writeFileSync(outputJsonPath, stdoutBuf, 'utf8'); } catch (_) {}
       }
+      renderer.summary(outputDir);
 
       // Timing summary
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -231,11 +457,13 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') parsed.help = true;
     else if (arg === '--ace' || arg === '--enable-ace-step') parsed.enableAceStep = true;
     else if (arg === '--fast-sample' || arg === '--fast') parsed.fastSample = true;
+    else if (arg === '--full-arrangement' || arg === '--arrangement-lock' || arg === '--full-guide') parsed.fullArrangement = true;
     else if (arg === '--vocals') parsed.vocals = true;
     else if (arg === '--instrumental') parsed.instrumental = true;
     else if (arg === '--control-scaffold') parsed.controlScaffold = true;
     else if (arg === '--no-control-scaffold') parsed.noControlScaffold = true;
     else if (arg === '--bass-proxy-source') parsed.bassProxySource = true;
+    else if (arg === '--allin1-docker') parsed.allin1Docker = true;
     else if (arg.startsWith('--')) {
       const key = toCamel(arg.slice(2));
       const value = argv[index + 1];
@@ -270,6 +498,7 @@ Options:
   --similarity-level <level>    Optional. low, medium-low, medium, medium-high, high, very-high, near-identical, or identical. Omit to let the prompt drive controls.
   --ace                         Enable ACE-Step generation; requires npm run ace-step:start in another terminal.
   --fast-sample                 Fast ACE calibration lane: skip stems, transcription, MIDI, and arrangement outputs.
+  --full-arrangement            Render section-by-section full-length Arrangement Lock audio with ACE, stitch full-arrangement-guide.wav, and skip the short sample lane.
   --vocals                      Force a new original vocal-hook role in ACE, useful when fast lane skips vocal detection.
   --instrumental                Force instrumental ACE output even when the reference has vocals.
   --candidates <n>              ACE candidate count. Defaults to 4 normal candidates; max 6.
@@ -285,6 +514,7 @@ Options:
   --control-scaffold            Generate an in-key bass/drum control scaffold and use it as ACE's cover reference.
   --no-control-scaffold         Disable automatic scaffold routing for bass-lock prompts.
   --bass-proxy-source           Experimental diagnostic only. Uses high-passed reference + generated bass guide; automatically skipped for rich/vocal references unless PROMPT2MIDI_ALLOW_EXPERIMENTAL_RICH_BASS_PROXY=1.
+  --allin1-docker               Run the optional All-In-One structure analyzer inside Docker. The pipeline still falls back to the internal beat-grid/section analyzer if Docker fails.
 
 Every audio run writes these full-song SUNO control artifacts under <output-dir>/exports:
   arrangement-map.json
@@ -294,6 +524,8 @@ Every audio run writes these full-song SUNO control artifacts under <output-dir>
 
 Optional analyzer/provider flags:
   PROMPT2MIDI_ALLIN1=/path/to/allin1
+  PROMPT2MIDI_ENABLE_ALLIN1_DOCKER=1
+  PROMPT2MIDI_ALLIN1_DOCKER_PLATFORM=linux/amd64
   PROMPT2MIDI_ESSENTIA_EXTRACTOR=/path/to/essentia_streaming_extractor_music
   PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE=1  # render section-by-section full-arrangement-guide.wav with ACE`);
 }

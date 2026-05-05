@@ -48,7 +48,7 @@ class SunoProxyPackageTest(unittest.TestCase):
             self.assertIn("generated proxy demo", prompt)
             self.assertIn("Do not imitate any famous artist", prompt)
             self.assertNotIn("Michael Jackson", prompt)
-            self.assertLessEqual(len(prompt), 1000)
+            self.assertLessEqual(len(prompt), 2000)
             self.assertIn("Preserve the proxy's arrangement", prompt)
             self.assertIn("Avoid unrelated layers", prompt)
 
@@ -65,6 +65,14 @@ class SunoProxyPackageTest(unittest.TestCase):
                     user_prompt="new track",
                     upload_duration=6.0,
                 )
+
+    def test_full_upload_duration_uses_entire_proxy_track(self):
+        section = suno_proxy_package._choose_proxy_section(360.12, "full", 42.0)
+
+        self.assertEqual(section["start_seconds"], 0.0)
+        self.assertEqual(section["end_seconds"], 360.12)
+        self.assertEqual(section["duration_seconds"], 360.12)
+        self.assertEqual(section["method"], "proxy_full_track")
 
     def _analysis(self):
         return {

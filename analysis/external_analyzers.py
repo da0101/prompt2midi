@@ -17,16 +17,37 @@ def analyze_allin1_structure(audio_path: str, output_dir: str) -> dict:
     """Run All-In-One Music Structure Analyzer when available."""
     if os.environ.get("PROMPT2MIDI_DISABLE_ALLIN1") == "1":
         return _unavailable("allin1", "disabled by PROMPT2MIDI_DISABLE_ALLIN1")
+    if os.environ.get("PROMPT2MIDI_ENABLE_ALLIN1_DOCKER") == "1":
+        return _run_allin1_docker(audio_path, output_dir)
+    if os.environ.get("PROMPT2MIDI_ENABLE_ALLIN1") != "1" and not os.environ.get("PROMPT2MIDI_ALLIN1"):
+        return _unavailable("allin1", "All-In-One analyzer is disabled by default; set PROMPT2MIDI_ENABLE_ALLIN1=1 to run it.")
     executable = _find_executable("PROMPT2MIDI_ALLIN1", "allin1")
     if not executable:
         return _unavailable("allin1", "All-In-One analyzer is not installed")
 
     out_dir = Path(output_dir) / "external" / "allin1"
     out_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = out_dir / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     timeout = float(os.environ.get("PROMPT2MIDI_ALLIN1_TIMEOUT_SECONDS") or "900")
-    command = [executable, audio_path, "--out-dir", str(out_dir)]
+    command = [
+        executable,
+        audio_path,
+        "--out-dir",
+        str(out_dir),
+        "--demix-dir",
+        str(out_dir / "demix"),
+        "--spec-dir",
+        str(out_dir / "spec"),
+        "--overwrite",
+        "--no-multiprocess",
+    ]
+    env = os.environ.copy()
+    env.setdefault("TORCH_HOME", str(cache_dir / "torch"))
+    env.setdefault("MPLCONFIGDIR", str(cache_dir / "matplotlib"))
+    env.setdefault("NUMBA_CACHE_DIR", str(cache_dir / "numba"))
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, env=env)
     except Exception as exc:
         return _unavailable("allin1", f"All-In-One failed to start: {exc}")
     if completed.returncode != 0:
@@ -36,15 +57,60 @@ def analyze_allin1_structure(audio_path: str, output_dir: str) -> dict:
     result_path = _latest_json(out_dir)
     if not result_path:
         return _unavailable("allin1", "All-In-One finished without a JSON result")
+    return _read_allin1_result(result_path, "allin1")
+
+
+def _run_allin1_docker(audio_path: str, output_dir: str) -> dict:
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "scripts" / "run-allin1-docker.sh"
+    if not script.exists():
+        return _unavailable("allin1_docker", "Docker All-In-One wrapper is missing")
+    if not os.access(script, os.X_OK):
+        return _unavailable("allin1_docker", "Docker All-In-One wrapper is not executable")
+
+    timeout = float(os.environ.get("PROMPT2MIDI_ALLIN1_DOCKER_TIMEOUT_SECONDS") or "300")
+    audio = Path(audio_path).resolve()
+    output = Path(output_dir).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    command = [str(script), str(audio), str(output), str(timeout)]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout + 120,
+            cwd=str(repo_root),
+        )
+    except Exception as exc:
+        return _unavailable("allin1_docker", f"Docker All-In-One failed to start: {exc}")
+
+    envelope = _json_from_stdout(completed.stdout)
+    if completed.returncode != 0:
+        detail = _docker_failure_detail(envelope, completed)
+        return _unavailable("allin1_docker", f"Docker All-In-One exited with code {completed.returncode}: {detail[:700]}")
+    if not envelope.get("ok"):
+        detail = _docker_failure_detail(envelope, completed)
+        return _unavailable("allin1_docker", f"Docker All-In-One did not return a usable result: {detail[:700]}")
+
+    result_value = envelope.get("result_path")
+    result_path = _host_path_from_docker(result_value, repo_root, output) if result_value else None
+    if not result_path or not result_path.exists():
+        result_path = _latest_json(output / "external" / "allin1-docker")
+    if not result_path:
+        return _unavailable("allin1_docker", "Docker All-In-One finished without a JSON result")
+    return _read_allin1_result(result_path, "allin1_docker")
+
+
+def _read_allin1_result(result_path: Path, method: str) -> dict:
     try:
         raw = json.loads(result_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return _unavailable("allin1", f"Could not parse All-In-One JSON: {exc}")
+        return _unavailable(method, f"Could not parse All-In-One JSON: {exc}")
 
     structure = _structure_from_allin1(raw)
     return {
         "available": True,
-        "method": "allin1",
+        "method": method,
         "path": str(result_path.resolve()),
         "bpm": raw.get("bpm"),
         "beats": raw.get("beats") or [],
@@ -212,6 +278,8 @@ def _find_executable(env_name: str, fallback_name: str) -> str | None:
     configured = os.environ.get(env_name)
     candidates = [configured] if configured else []
     candidates.append(shutil.which(fallback_name))
+    repo_root = Path(__file__).resolve().parent.parent
+    candidates.append(str(repo_root / f".venv-{fallback_name}" / "bin" / fallback_name))
     for candidate in candidates:
         if candidate and os.path.exists(candidate) and os.access(candidate, os.X_OK):
             return candidate
@@ -219,8 +287,49 @@ def _find_executable(env_name: str, fallback_name: str) -> str | None:
 
 
 def _latest_json(directory: Path) -> Path | None:
+    if not directory.exists():
+        return None
     matches = sorted(directory.rglob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
     return matches[0] if matches else None
+
+
+def _json_from_stdout(stdout: str | None) -> dict:
+    for line in reversed((stdout or "").splitlines()):
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _docker_failure_detail(envelope: dict, completed: subprocess.CompletedProcess) -> str:
+    parts = [
+        str(envelope.get("error") or ""),
+        str(envelope.get("stderr_tail") or ""),
+        str(envelope.get("stdout_tail") or ""),
+        completed.stderr or "",
+        completed.stdout or "",
+    ]
+    return " ".join(part.strip() for part in parts if part and part.strip()) or "no diagnostic output"
+
+
+def _host_path_from_docker(path_value: str | None, repo_root: Path, output_root: Path | None = None) -> Path | None:
+    if not path_value:
+        return None
+    if path_value == "/workspace":
+        return repo_root
+    if path_value.startswith("/workspace/"):
+        return repo_root / path_value[len("/workspace/") :]
+    if output_root and path_value == "/job":
+        return output_root
+    if output_root and path_value.startswith("/job/"):
+        return output_root / path_value[len("/job/") :]
+    return Path(path_value)
 
 
 def _unavailable(method: str, reason: str) -> dict:

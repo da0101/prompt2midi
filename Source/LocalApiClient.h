@@ -265,10 +265,27 @@ inline juce::String summarizeFullArrangement (const juce::var& fullArrangement)
     if (sections.isNotEmpty())
         output << "Sections: " << sections << "\n";
 
+    if (auto* lockObject = fullObject->getProperty ("arrangement_lock").getDynamicObject())
+    {
+        auto lockStatus = lockObject->getProperty ("status").toString();
+        auto lockConfidence = lockObject->getProperty ("confidence").toString();
+        auto lockSummary = lockObject->getProperty ("summary").toString();
+        if (lockStatus.isNotEmpty())
+            output << "Arrangement Lock: " << lockStatus;
+        if (lockConfidence.isNotEmpty())
+            output << " (" << lockConfidence << " confidence)";
+        if (lockStatus.isNotEmpty() || lockConfidence.isNotEmpty())
+            output << "\n";
+        if (lockSummary.isNotEmpty())
+            output << lockSummary << "\n";
+    }
+
     if (auto* pathsObject = paths.getDynamicObject())
     {
         output << "Files:\n";
         for (const juce::String& key : { juce::String ("arrangement_map"),
+                                         juce::String ("arrangement_lock_report"),
+                                         juce::String ("structure_debug"),
                                          juce::String ("analysis_report"),
                                          juce::String ("suno_structure_prompt"),
                                          juce::String ("full_arrangement_guide_midi") })

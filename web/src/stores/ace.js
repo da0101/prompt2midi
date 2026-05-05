@@ -12,7 +12,7 @@ export const useAceStore = defineStore('ace', () => {
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const data = await res.json()
       status.value = data.status ?? 'unknown'
-      message.value = data.message ?? ''
+      message.value = producerCopy(data.message ?? '')
     } catch (error) {
       status.value = 'unknown'
       message.value = 'API server unreachable. Start it with npm run web:dev.'
@@ -32,7 +32,7 @@ export const useAceStore = defineStore('ace', () => {
     } catch (error) {
       status.value = 'unknown'
       message.value = 'API server unreachable. Start it with npm run web:dev.'
-      toast.error('API server unreachable', `Could not ${name} ACE. Run npm run web:dev and refresh.`)
+      toast.error('API server unreachable', `Could not ${name} the local generator. Run npm run web:dev and refresh.`)
       return false
     }
     const pollError = await poll()
@@ -41,6 +41,12 @@ export const useAceStore = defineStore('ace', () => {
       return false
     }
     return true
+  }
+
+  function producerCopy(text) {
+    return String(text || '')
+      .replace(/\bACE-Step\b/g, 'local generator')
+      .replace(/\bACE\b/g, 'local generator')
   }
 
   return { status, message, poll, action }

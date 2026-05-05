@@ -184,7 +184,11 @@ def _build_description(
     if detected_drums.get("kick"):
         tempo_feel = detected_drums.get("tempo_feel", "tight")
         density = detected_drums.get("density", "medium")
-        drum_desc = f"drum pattern from reference — {tempo_feel} feel, {density} density"
+        character = detected_drums.get("percussion_character")
+        if character == "tribal_percussion":
+            drum_desc = "dense tribal percussion from reference — conga/bongo/shaker-style 16th-note movement over the kick"
+        else:
+            drum_desc = f"drum pattern from reference — {tempo_feel} feel, {density} density"
     elif style == "synth_wave":
         drum_desc = "sparse kick pattern with 8th-note hat groove and open hat accents"
     elif style == "hip_hop":

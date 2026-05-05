@@ -165,6 +165,9 @@ describe('prompt2midi local API', () => {
       assert.equal(start.statusCode, 202);
       const status = await waitForStatus(server, start.body.job_id, 'succeeded', 80);
       assert.ok(status.body.events.some((event) => event.detail.includes('feature extraction')));
+      assert.ok(status.body.events.some((event) => Number.isFinite(event.elapsed_ms)));
+      assert.ok(status.body.events.some((event) => event.type === 'done' && Number.isFinite(event.duration_ms)));
+      assert.ok(status.body.timings.some((item) => item.label === '02.2 python engine' && Number.isFinite(item.duration_ms)));
 
       const result = await request(server, 'GET', `/result?id=${start.body.job_id}`);
       assert.equal(result.statusCode, 200);

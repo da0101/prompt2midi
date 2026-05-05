@@ -1,9 +1,10 @@
 <script setup>
 import { ref, watch, nextTick, onUnmounted, computed } from 'vue'
-import { Bug, CircleAlert, CircleX } from 'lucide-vue-next'
+import { Bug, CircleAlert, CircleX, Copy, ExternalLink } from 'lucide-vue-next'
 import { useRunStore } from '../stores/run.js'
 import { useAudioStore } from '../stores/audio.js'
 import { useSheet } from '../composables/useSheet.js'
+import { toast } from '../composables/useToast.js'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -37,8 +38,10 @@ const elapsedLabel = computed(() => {
 })
 
 const visibleEvents = computed(() => {
-  if (showDebug.value) return run.events
-  return run.events.filter((ev) => !['trace', 'log', 'command'].includes(ev.type))
+  const events = showDebug.value
+    ? run.events
+    : run.events.filter((ev) => !['trace', 'log', 'command'].includes(ev.type))
+  return events.map((ev) => ({ ...ev, displayMessage: producerCopy(ev.message) }))
 })
 
 const debugSeverity = computed(() => {
@@ -52,6 +55,10 @@ const DebugIcon = computed(() => {
   if (debugSeverity.value === 'warning') return CircleAlert
   return Bug
 })
+
+const sunoPromptUrl = computed(() => (
+  run.files.sunoPrompt ? '/file?path=' + encodeURIComponent(run.files.sunoPrompt) : ''
+))
 
 const debugButtonClass = computed(() => {
   if (!showDebug.value) return 'text-muted-foreground'
@@ -96,6 +103,27 @@ watch(
   },
   { immediate: true },
 )
+
+async function copySunoPrompt() {
+  const text = run.files.sunoPromptText || ''
+  if (!text) {
+    toast.error('SUNO prompt unavailable', 'The prompt file was not found in this run.')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success('SUNO prompt copied', `${text.length} characters ready to paste.`)
+  } catch {
+    toast.error('Copy failed', 'Open the prompt file and copy it manually.')
+  }
+}
+
+function producerCopy(text) {
+  return String(text || '')
+    .replace(/\bACE-Step\b/g, 'local generator')
+    .replace(/\bace-step\b/gi, 'generation')
+    .replace(/\bACE\b/g, 'local generator')
+}
 </script>
 
 <template>
@@ -210,7 +238,7 @@ watch(
                 'text-muted-foreground': !['error','warning','done','progress','trace','log'].includes(ev.type),
               }"
             >{{ ev.type }}</span>
-            <span class="text-muted-foreground break-words min-w-0">{{ ev.message }}</span>
+            <span class="text-muted-foreground break-words min-w-0">{{ ev.displayMessage }}</span>
           </li>
           <div ref="eventsBottom" />
         </ul>
@@ -269,6 +297,47 @@ watch(
           <p class="text-[10px] text-muted-foreground">
             Tap a track to load it in the player at the bottom of the screen.
           </p>
+        </div>
+
+        <!-- SUNO prompt — copy this after uploading the generated proxy audio -->
+        <div v-if="run.files.sunoPrompt || run.files.sunoPromptText" class="space-y-2 pt-1">
+          <Separator />
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                SUNO optimized prompt
+              </p>
+              <p class="text-[10px] text-muted-foreground">
+                Upload the SUNO proxy audio, then paste this prompt into SUNO.
+              </p>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <Button
+                v-if="run.files.sunoPromptText"
+                variant="outline"
+                size="sm"
+                class="h-7 px-2.5 text-xs gap-1.5"
+                @click="copySunoPrompt"
+              >
+                <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                Copy
+              </Button>
+              <a
+                v-if="sunoPromptUrl"
+                :href="sunoPromptUrl"
+                target="_blank"
+                rel="noreferrer"
+                class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink class="w-3.5 h-3.5" aria-hidden="true" />
+                Open
+              </a>
+            </div>
+          </div>
+          <pre
+            v-if="run.files.sunoPromptText"
+            class="max-h-44 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-secondary/30 p-3 text-xs leading-relaxed text-muted-foreground"
+          >{{ run.files.sunoPromptText }}</pre>
         </div>
 
       </div>

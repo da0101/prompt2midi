@@ -74,6 +74,7 @@ function createApp(options = {}) {
           progress: job.progress,
           message: job.message,
           events: job.events || [],
+          timings: job.timings || [],
           error: job.error || null
         });
       }
@@ -199,22 +200,66 @@ async function runJob(jobId, input, jobs, analyzer, promptGenerator, sunoGenerat
 
 function createJobPipelineLogger(jobId, jobs) {
   const terminal = createPipelineLogger(jobId);
+  const startedAt = Date.now();
+  const stageStarts = new Map();
+  const timings = [];
+  let lastProgressKey = '';
+  let lastProgressCount = 0;
 
-  function record(type, label, detail = '') {
+  function record(type, label, detail = '', meta = {}) {
     const job = jobs.get(jobId);
     if (!job) return;
+    const event = {
+      at: new Date().toISOString(),
+      elapsed_ms: Math.max(0, Date.now() - startedAt),
+      type,
+      label,
+      detail,
+      ...meta
+    };
     const events = [
       ...(job.events || []),
-      {
-        at: new Date().toISOString(),
-        type,
-        label,
-        detail
-      }
-    ].slice(-50);
+      event
+    ].slice(-200);
     jobs.update(jobId, {
       events,
+      timings,
       message: detail ? `${label}: ${detail}` : label
+    });
+  }
+
+  function updateProgress(detail) {
+    const job = jobs.get(jobId);
+    if (!job) return;
+    const key = canonicalProgress(detail);
+    const events = [...(job.events || [])];
+    const now = new Date().toISOString();
+    const elapsed = Math.max(0, Date.now() - startedAt);
+    if (events.length && key && key === lastProgressKey && events[events.length - 1].type === 'progress') {
+      lastProgressCount += 1;
+      events[events.length - 1] = {
+        ...events[events.length - 1],
+        at: now,
+        elapsed_ms: elapsed,
+        count: lastProgressCount,
+        detail: lastProgressCount > 1 ? `${detail} (${lastProgressCount} updates)` : detail
+      };
+    } else {
+      lastProgressKey = key;
+      lastProgressCount = 1;
+      events.push({
+        at: now,
+        elapsed_ms: elapsed,
+        type: 'progress',
+        label: 'Progress',
+        detail
+      });
+    }
+    jobs.update(jobId, {
+      events: events.slice(-200),
+      timings,
+      progress: progressForPipeline(detail, job.progress || 0),
+      message: detail
     });
   }
 
@@ -224,12 +269,21 @@ function createJobPipelineLogger(jobId, jobs) {
       record('start', 'Job started', input.audioPath ? `Audio: ${input.audioPath}` : 'Prompt-only mode');
     },
     stage(name, detail = '') {
+      stageStarts.set(name, Date.now());
       terminal.stage(name, detail);
       record('stage', name, detail);
     },
     done(name, detail = '') {
+      const started = stageStarts.get(name) || startedAt;
+      const durationMs = Math.max(0, Date.now() - started);
+      timings.push({
+        label: name,
+        detail,
+        started_at: new Date(started).toISOString(),
+        duration_ms: durationMs
+      });
       terminal.done(name, detail);
-      record('done', name, detail);
+      record('done', name, detail, { duration_ms: durationMs });
     },
     warn(detail) {
       terminal.warn(detail);
@@ -239,15 +293,49 @@ function createJobPipelineLogger(jobId, jobs) {
       terminal.info(detail);
       record('detail', 'Detail', detail);
     },
+    progress(detail) {
+      terminal.info(detail);
+      updateProgress(detail);
+    },
     fail(error) {
       terminal.fail(error);
       record('failed', 'Analysis failed', error && (error.message || String(error)));
     },
     success(detail = '') {
       terminal.success(detail);
-      record('complete', 'Analysis complete', detail);
+      record('complete', 'Analysis complete', detail, { duration_ms: Math.max(0, Date.now() - startedAt) });
     }
   };
+}
+
+function canonicalProgress(detail) {
+  const text = String(detail || '');
+  if (/ace-step: waiting for task/i.test(text)) return 'ace-step: waiting for task';
+  return text.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/ig, '<task>');
+}
+
+function progressForPipeline(detail, current) {
+  const text = String(detail || '');
+  const rules = [
+    [/reading audio|feature extraction/i, 15],
+    [/enhanced analysis/i, 22],
+    [/external analysis/i, 28],
+    [/beat grid/i, 32],
+    [/deep analysis/i, 38],
+    [/midi sketch|heuristic bass|reference groove/i, 45],
+    [/stem separation/i, 54],
+    [/model transcription/i, 62],
+    [/reference transform|composition/i, 68],
+    [/full arrangement/i, 72],
+    [/ace-step: submitting/i, 78],
+    [/ace-step: waiting/i, 84],
+    [/ace-step: downloading|ace-step: scoring/i, 90],
+    [/audio generation/i, 94],
+  ];
+  for (const [pattern, value] of rules) {
+    if (pattern.test(text)) return Math.max(current || 0, value);
+  }
+  return Math.max(current || 0, 10);
 }
 
 function promptOnlyAnalysis(prompt) {

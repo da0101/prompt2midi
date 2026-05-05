@@ -1,0 +1,21 @@
+services:
+  allin1-worker:
+    build:
+      context: .
+      dockerfile: docker/allin1/Dockerfile
+      args:
+        TORCH_VERSION: ${PROMPT2MIDI_DOCKER_TORCH_VERSION:-2.7.1}
+        TORCHAUDIO_VERSION: ${PROMPT2MIDI_DOCKER_TORCHAUDIO_VERSION:-2.7.1}
+        ALLIN1_FIX_VERSION: ${PROMPT2MIDI_DOCKER_ALLIN1_FIX_VERSION:-2.0.4}
+    platform: ${PROMPT2MIDI_ALLIN1_DOCKER_PLATFORM:-linux/amd64}
+    working_dir: /workspace
+    environment:
+      HF_HOME: /workspace/.cache/docker/allin1/huggingface
+      MPLCONFIGDIR: /workspace/.cache/docker/allin1/matplotlib
+      NUMBA_CACHE_DIR: /workspace/.cache/docker/allin1/numba
+      TORCH_HOME: /workspace/.cache/docker/allin1/torch
+      XDG_CACHE_HOME: /workspace/.cache/docker/allin1/xdg
+      PROMPT2MIDI_DOCKER_ALLIN1_COMMAND: allin1fix
+      PROMPT2MIDI_DOCKER_ALLIN1_DEVICE: cpu
+    volumes:
+      - .:/workspace

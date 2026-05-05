@@ -321,6 +321,9 @@ def _caption(prompt: str, analysis: dict) -> str:
         "professional conventional instrument timbres",
         end_guard,
     ]
+    drum_priority = _drum_priority_text(analysis)
+    if drum_priority:
+        additions.insert(4, drum_priority)
     if direct_vocal:
         additions.insert(
             4,
@@ -345,6 +348,17 @@ def _caption(prompt: str, analysis: dict) -> str:
 
     caption = ". ".join(priority + additions)
     return _sentence_limited(caption, 1300)
+
+
+def _drum_priority_text(analysis: dict) -> str:
+    drums = (analysis or {}).get("drums") or {}
+    if drums.get("percussion_character") == "tribal_percussion":
+        return (
+            "priority drum layer: preserve dense tribal percussion as a main audible element: "
+            "continuous conga/bongo/shaker/tambourine-style 16th-note movement over the house kick, "
+            "not sparse generic hats"
+        )
+    return ""
 
 
 def _explicit_layer_requests(prompt: str) -> str:
@@ -472,6 +486,8 @@ def _negative_prompt(vocal: dict) -> str:
     common = (
         "atonal high pitched artifacts, alien glitches, sci-fi lasers, metallic chirps, "
         "cartoon toy instruments, chipmunk sounds, harsh squeals, random melodies, "
+        "Christmas music, holiday music, sleigh bells, jingle bells, church bells, orchestral bells, glockenspiel melody, "
+        "choir, carol, cinematic score, nursery rhyme, cheerful pop, cheesy festive melody, "
         "off-key bass notes, out-of-scale lead notes, unresolved chromatic melody, clashing wrong notes, "
         "dissonant random pitch, "
         "stretched vocal chops, warped vocal transitions, squeezed formants, smeared transition notes, "
@@ -529,6 +545,8 @@ def _effective_similarity(transform: dict, fallback: float | None = None) -> flo
 
 
 def _task_type(transform: dict, groove_similarity: float) -> str:
+    if _is_full_arrangement_section(transform):
+        return "cover"
     route = (((transform or {}).get("ace_preflight") or {}).get("hidden_controls") or {}).get("route")
     if route == "analysis_text_conditioned":
         return "text2music"
@@ -558,14 +576,22 @@ def _source_conditioning(transform: dict, groove_similarity: float, is_cover: bo
         }
 
     if controls and not (env_reference_strength or env_noise_strength):
+        reference_strength = max(0.0, min(1.0, float(controls.get("reference_strength") or 0.0)))
+        cover_noise_strength = max(0.0, min(1.0, float(controls.get("cover_noise_strength") or 0.0)))
+        if _requires_percussion_preservation(transform):
+            reference_strength = max(reference_strength, 0.48)
+            cover_noise_strength = max(cover_noise_strength, 0.28)
         return {
-            "reference_strength": str(round(max(0.0, min(1.0, float(controls.get("reference_strength") or 0.0))), 3)),
-            "cover_noise_strength": str(round(max(0.0, min(1.0, float(controls.get("cover_noise_strength") or 0.0))), 3)),
+            "reference_strength": str(round(reference_strength, 3)),
+            "cover_noise_strength": str(round(cover_noise_strength, 3)),
         }
 
     if "audio_cover_strength" in profile or "cover_noise_strength" in profile:
         reference_strength = max(0.0, min(1.0, float(profile.get("audio_cover_strength") or 0.0)))
         cover_noise_strength = max(0.0, min(1.0, float(profile.get("cover_noise_strength") or 0.0)))
+        if _requires_percussion_preservation(transform):
+            reference_strength = max(reference_strength, 0.48)
+            cover_noise_strength = max(cover_noise_strength, 0.28)
         if _rich_reference_safe_mode(transform, groove_similarity):
             reference_strength = max(reference_strength, 0.26)
             cover_noise_strength = max(cover_noise_strength, 0.1)
@@ -608,6 +634,18 @@ def _rich_reference_safe_mode(transform: dict, groove_similarity: float) -> bool
     return bool(rich_reference.get("enabled")) or (
         groove_similarity <= 0.35 and vocal.get("render_mode") == "instrumental_hook_proxy"
     )
+
+
+def _requires_percussion_preservation(transform: dict) -> bool:
+    if _is_full_arrangement_section(transform):
+        return False
+    drums = (transform or {}).get("drums") or {}
+    return drums.get("percussion_character") == "tribal_percussion"
+
+
+def _is_full_arrangement_section(transform: dict) -> bool:
+    generation_context = (transform or {}).get("full_arrangement_generation") or {}
+    return generation_context.get("mode") == "section_inspired_stitch"
 
 
 def _lock_value(value: object, fallback: float) -> float:

@@ -6,10 +6,12 @@ import sys
 import tempfile
 import unittest
 import wave
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from feature_extraction import analyze_wav
+from beat_grid import analyze_beat_grid
 from full_arrangement import build_arrangement_map, build_full_arrangement_package
 from full_guide_audio import generate_full_arrangement_guide_audio
 from external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
@@ -121,9 +123,12 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertEqual(full["status"], "ready")
         self.assertGreaterEqual(full["total_bars"], 1)
         self.assertTrue(full["paths"]["arrangement_map"].endswith("arrangement-map.json"))
+        self.assertTrue(full["paths"]["arrangement_lock_report"].endswith("arrangement-lock-report.json"))
+        self.assertTrue(full["paths"]["structure_debug"].endswith("structure-debug.json"))
         self.assertTrue(full["paths"]["analysis_report"].endswith("analysis-report.md"))
         self.assertTrue(full["paths"]["suno_structure_prompt"].endswith("suno-structure-prompt.md"))
         self.assertTrue(full["paths"]["full_arrangement_guide_midi"].endswith("full-arrangement-guide.mid"))
+        self.assertIn("arrangement_lock", full)
 
     def test_full_arrangement_package_writes_suno_structure_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -155,6 +160,8 @@ class FeatureExtractionTest(unittest.TestCase):
 
             with open(package["paths"]["arrangement_map"], encoding="utf-8") as handle:
                 arrangement = json.load(handle)
+            with open(package["paths"]["arrangement_lock_report"], encoding="utf-8") as handle:
+                lock_report = json.load(handle)
             with open(package["paths"]["analysis_report"], encoding="utf-8") as handle:
                 report = handle.read()
             with open(package["paths"]["suno_structure_prompt"], encoding="utf-8") as handle:
@@ -162,11 +169,175 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertEqual(package["status"], "ready")
         self.assertEqual(arrangement["similarity_level"], "medium_high")
+        self.assertIn("blueprint_fidelity", arrangement)
+        self.assertIn("arrangement_lock", arrangement)
+        self.assertEqual(arrangement["reference_version"]["kind"], "radio_edit_or_short_mix")
+        self.assertEqual(lock_report["status"], arrangement["arrangement_lock"]["status"])
+        self.assertEqual(lock_report["reference_version"]["kind"], "radio_edit_or_short_mix")
         self.assertGreaterEqual(arrangement["total_bars"], 80)
         self.assertEqual(arrangement["sections"][0]["role"], "intro")
+        self.assertIn("locked_bar_range", arrangement["sections"][0])
+        self.assertIn("transition_out", arrangement["sections"][0])
         self.assertIn("Arrangement Map", report)
+        self.assertIn("Arrangement Lock Review", report)
         self.assertIn("Use the attached ACE guide audio", prompt)
         self.assertIn("darker bass", prompt)
+
+    def test_arrangement_lock_uses_allin1_downbeats_when_available(self):
+        downbeats = [float(i * 2) for i in range(0, 97)]
+        arrangement = build_arrangement_map(
+            {
+                "duration_seconds": 192.0,
+                "bpm": 120.0,
+                "bpm_confidence": 0.9,
+                "key": "D minor",
+                "allin1": {"available": True, "downbeats": downbeats, "beats": [float(i * 0.5) for i in range(0, 385)]},
+                "structure": {
+                    "method": "allin1_functional_segmentation",
+                    "sections": [
+                        {"start": 0.0, "end": 32.0, "label": "intro", "energy": 0.25, "source": "allin1"},
+                        {"start": 32.0, "end": 96.0, "label": "verse", "energy": 0.75, "source": "allin1"},
+                        {"start": 96.0, "end": 128.0, "label": "breakdown", "energy": 0.2, "source": "allin1"},
+                        {"start": 128.0, "end": 192.0, "label": "drop", "energy": 0.95, "source": "allin1"},
+                    ],
+                },
+            },
+            similarity_level="medium",
+        )
+
+        from arrangement_lock import build_arrangement_lock_artifacts
+
+        artifacts = build_arrangement_lock_artifacts(
+            {
+                "duration_seconds": 192.0,
+                "bpm": 120.0,
+                "bpm_confidence": 0.9,
+                "allin1": {"available": True, "downbeats": downbeats, "beats": [float(i * 0.5) for i in range(0, 385)]},
+                "structure": {"method": "allin1_functional_segmentation", "sections": []},
+            },
+            arrangement,
+        )
+
+        self.assertEqual(arrangement["bar_grid"]["source"], "allin1_downbeats")
+        self.assertFalse(arrangement["arrangement_lock"]["review_required"])
+        self.assertEqual(artifacts["lock_report"]["status"], "ready_for_generation")
+
+    def test_arrangement_lock_repairs_sparse_long_song_structure(self):
+        arrangement = build_arrangement_map(
+            {
+                "duration_seconds": 210.0,
+                "bpm": 129.0,
+                "bpm_confidence": 0.82,
+                "key": "F minor",
+                "beat_grid": {"available": True, "confidence": 0.74, "beats": [float(i * 0.465) for i in range(452)], "downbeats": [float(i * 1.86) for i in range(113)]},
+                "structure": {
+                    "method": "fallback_spectral_segmentation",
+                    "sections": [
+                        {"start": 0.0, "end": 119.0, "label": "intro", "energy": 0.3},
+                        {"start": 119.0, "end": 195.0, "label": "breakdown", "energy": 0.25},
+                        {"start": 195.0, "end": 210.0, "label": "outro", "energy": 0.2},
+                    ],
+                },
+            },
+            similarity_level="medium",
+        )
+
+        from arrangement_lock import build_arrangement_lock_artifacts
+
+        build_arrangement_lock_artifacts(
+            {
+                "duration_seconds": 210.0,
+                "bpm": 129.0,
+                "bpm_confidence": 0.82,
+                "beat_grid": {"available": True, "confidence": 0.74, "beats": [float(i * 0.465) for i in range(452)], "downbeats": [float(i * 1.86) for i in range(113)]},
+                "structure": {"method": "fallback_spectral_segmentation", "sections": []},
+            },
+            arrangement,
+        )
+
+        roles = [section["role"] for section in arrangement["sections"]]
+        warning_codes = {item["code"] for item in arrangement["blueprint_fidelity"]["warnings"]}
+        self.assertEqual(roles, ["intro", "groove", "variation", "breakdown", "drop", "outro"])
+        self.assertEqual(arrangement["sections"][0]["locked_bar_range"]["bar_count"], 16)
+        self.assertIn("phrase_subdivision_used", warning_codes)
+        self.assertTrue(any(section.get("source_kind") == "phrase_subdivision" for section in arrangement["sections"]))
+        self.assertFalse(arrangement["arrangement_lock"]["review_required"])
+
+    def test_arrangement_lock_normalizes_extended_club_mix_to_phrase_grid(self):
+        raw_sections = [
+            {"start": 0.0, "end": 0.98, "label": "A", "energy": 0.1173},
+            {"start": 0.98, "end": 22.92, "label": "B", "energy": 0.0922},
+            {"start": 22.92, "end": 23.41, "label": "C", "energy": 0.1411},
+            {"start": 23.41, "end": 96.06, "label": "B", "energy": 0.2503},
+            {"start": 96.06, "end": 96.55, "label": "A", "energy": 0.1403},
+            {"start": 96.55, "end": 217.97, "label": "D", "energy": 0.314},
+            {"start": 217.97, "end": 218.45, "label": "C", "energy": 0.1482},
+            {"start": 218.45, "end": 360.15, "label": "C", "energy": 0.3299},
+        ]
+        beat_grid = {
+            "available": True,
+            "confidence": 0.88,
+            "beats": [float(i * 0.4644) for i in range(776)],
+            "downbeats": [float(i * 1.8576) for i in range(194)],
+        }
+        analysis = {
+            "duration_seconds": 360.152,
+            "bpm": 129.2,
+            "bpm_confidence": 0.82,
+            "key": "D# major",
+            "beat_grid": beat_grid,
+            "structure": {"method": "laplacian_segmentation", "sections": raw_sections},
+            "vocals": {"present": True},
+            "reference_transform": {"vocals": {"preserve_role": True}},
+        }
+        arrangement = build_arrangement_map(analysis, similarity_level="medium_high")
+
+        from arrangement_lock import build_arrangement_lock_artifacts
+
+        build_arrangement_lock_artifacts(analysis, arrangement)
+
+        bars = [section["locked_bar_range"]["bar_count"] for section in arrangement["sections"]]
+        warning_codes = {item["code"] for item in arrangement["blueprint_fidelity"]["warnings"]}
+        self.assertEqual(bars, [16, 32, 32, 32, 32, 32, 18])
+        self.assertTrue(all(section.get("source_kind") == "phrase_grid_normalized" for section in arrangement["sections"]))
+        self.assertIn("phrase_grid_normalized", warning_codes)
+        self.assertGreaterEqual(arrangement["arrangement_lock"]["confidence"], 0.8)
+        self.assertFalse(arrangement["arrangement_lock"]["review_required"])
+
+    def test_beat_grid_fallback_provides_downbeat_candidate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wav_path = os.path.join(temp_dir, "pulse.wav")
+            self._write_pulsed_wav(wav_path, bpm=120)
+            beat_grid = analyze_beat_grid(wav_path, 120.0)
+            arrangement = build_arrangement_map(
+                {
+                    "duration_seconds": 8.0,
+                    "bpm": 120.0,
+                    "bpm_confidence": 0.8,
+                    "key": "C minor",
+                    "beat_grid": beat_grid,
+                    "structure": {"sections": []},
+                },
+                similarity_level="medium",
+            )
+
+            from arrangement_lock import build_arrangement_lock_artifacts
+
+            artifacts = build_arrangement_lock_artifacts(
+                {
+                    "duration_seconds": 8.0,
+                    "bpm": 120.0,
+                    "bpm_confidence": 0.8,
+                    "beat_grid": beat_grid,
+                    "structure": {"sections": []},
+                },
+                arrangement,
+            )
+
+        self.assertTrue(beat_grid["available"])
+        self.assertGreaterEqual(len(beat_grid["downbeats"]), 1)
+        self.assertIn("bar_grid_candidates", artifacts["structure_debug"])
+        self.assertTrue(any(item["source"] == "librosa_estimated_downbeats" for item in artifacts["structure_debug"]["bar_grid_candidates"]))
 
     def test_arrangement_map_falls_back_to_bar_grid_without_structure_model(self):
         arrangement = build_arrangement_map(
@@ -181,6 +352,7 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertEqual(arrangement["method"], "fallback_bar_grid")
         self.assertEqual(arrangement["similarity_level"], "low")
+        self.assertNotIn("arrangement_lock", arrangement)
         self.assertEqual(arrangement["sections"][0]["start_bar"], 1)
         self.assertEqual(arrangement["sections"][-1]["end_bar"], arrangement["total_bars"])
         self.assertTrue(any(section["role"] == "breakdown" for section in arrangement["sections"]))
@@ -208,6 +380,37 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("disabled", allin1["warnings"][0])
         self.assertIn("disabled", essentia["warnings"][0])
 
+    def test_allin1_docker_adapter_parses_success_envelope(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = os.path.join(temp_dir, "reference.wav")
+            result_path = os.path.join(temp_dir, "allin1-result.json")
+            with open(audio_path, "wb") as handle:
+                handle.write(b"RIFF")
+            with open(result_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "bpm": 124,
+                        "beats": [0.0, 0.484, 0.968, 1.452],
+                        "downbeats": [0.0],
+                        "segments": [{"start": 0.0, "end": 32.0, "label": "intro"}],
+                    },
+                    handle,
+                )
+            completed = mock.Mock(
+                returncode=0,
+                stdout=json.dumps({"ok": True, "result_path": result_path}) + "\n",
+                stderr="",
+            )
+            with mock.patch.dict(os.environ, {"PROMPT2MIDI_ENABLE_ALLIN1_DOCKER": "1"}, clear=False):
+                os.environ.pop("PROMPT2MIDI_DISABLE_ALLIN1", None)
+                with mock.patch("external_analyzers.subprocess.run", return_value=completed):
+                    result = analyze_allin1_structure(audio_path, temp_dir)
+
+        self.assertTrue(result["available"])
+        self.assertEqual(result["method"], "allin1_docker")
+        self.assertEqual(result["bpm"], 124)
+        self.assertEqual(result["structure"]["sections"][0]["label"], "intro")
+
     def test_full_guide_audio_is_disabled_by_default(self):
         result = generate_full_arrangement_guide_audio(
             reference_audio="unused.wav",
@@ -219,6 +422,357 @@ class FeatureExtractionTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "not_generated")
         self.assertIn("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", result["reason"])
+
+    def test_full_guide_audio_requires_arrangement_review_when_confidence_is_low(self):
+        old_full = os.environ.get("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE")
+        old_ace = os.environ.get("PROMPT2MIDI_ENABLE_ACE_STEP")
+        old_allow = os.environ.get("PROMPT2MIDI_ALLOW_UNREVIEWED_FULL_ACE_GUIDE")
+        os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = "1"
+        os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = "1"
+        os.environ.pop("PROMPT2MIDI_ALLOW_UNREVIEWED_FULL_ACE_GUIDE", None)
+        try:
+            result = generate_full_arrangement_guide_audio(
+                reference_audio="unused.wav",
+                output_dir="/tmp",
+                analysis={},
+                full_arrangement={
+                    "arrangement_lock": {"review_required": True},
+                    "sections": [{"start_seconds": 0, "end_seconds": 8, "role": "intro"}],
+                },
+                user_prompt="",
+            )
+        finally:
+            if old_full is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = old_full
+            if old_ace is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_ACE_STEP", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = old_ace
+            if old_allow is None:
+                os.environ.pop("PROMPT2MIDI_ALLOW_UNREVIEWED_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ALLOW_UNREVIEWED_FULL_ACE_GUIDE"] = old_allow
+
+        self.assertEqual(result["status"], "not_generated")
+        self.assertIn("Review arrangement-lock-report.json", result["reason"])
+
+    def test_full_guide_audio_uses_inspired_section_stitch_profile(self):
+        old_full = os.environ.get("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE")
+        old_ace = os.environ.get("PROMPT2MIDI_ENABLE_ACE_STEP")
+        old_level = os.environ.get("PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL")
+        old_candidates = os.environ.get("PROMPT2MIDI_FULL_GUIDE_CANDIDATES")
+        captured = []
+        os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = "1"
+        os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = "1"
+        os.environ.pop("PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL", None)
+        os.environ.pop("PROMPT2MIDI_FULL_GUIDE_CANDIDATES", None)
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                candidate = os.path.join(temp_dir, "candidate.wav")
+                with open(candidate, "wb") as handle:
+                    handle.write(b"RIFF")
+
+                def fake_generate(**kwargs):
+                    captured.append(kwargs)
+                    return {"status": "succeeded", "selected_candidate": candidate, "candidates": [{"path": candidate}]}
+
+                with mock.patch("full_guide_audio._extract_wav"), mock.patch("full_guide_audio._concat_wavs"), mock.patch(
+                    "full_guide_audio.generate_with_ace_step",
+                    side_effect=fake_generate,
+                ):
+                    result = generate_full_arrangement_guide_audio(
+                        reference_audio="reference.wav",
+                        output_dir=temp_dir,
+                        analysis={
+                            "bpm": 129.2,
+                            "key": "D# major",
+                            "key_confidence": 0.55,
+                            "reference_similarity_level": "medium_high",
+                            "drums": {
+                                "method": "onset_detection",
+                                "density": "dense",
+                                "percussion_character": "tribal_percussion",
+                                "hits_per_bar": 39.3,
+                            },
+                        },
+                        full_arrangement={
+                            "similarity_level": "medium_high",
+                            "arrangement_lock": {"review_required": False},
+                            "sections": [
+                                {
+                                    "start_seconds": 0,
+                                    "end_seconds": 8,
+                                    "start_bar": 1,
+                                    "end_bar": 4,
+                                    "role": "groove",
+                                    "energy_level": "high",
+                                    "active_roles": ["kick", "bass", "percussion"],
+                                }
+                            ],
+                        },
+                        user_prompt="",
+                    )
+        finally:
+            if old_full is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = old_full
+            if old_ace is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_ACE_STEP", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = old_ace
+            if old_level is None:
+                os.environ.pop("PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL", None)
+            else:
+                os.environ["PROMPT2MIDI_FULL_GUIDE_SIMILARITY_LEVEL"] = old_level
+            if old_candidates is None:
+                os.environ.pop("PROMPT2MIDI_FULL_GUIDE_CANDIDATES", None)
+            else:
+                os.environ["PROMPT2MIDI_FULL_GUIDE_CANDIDATES"] = old_candidates
+
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["mode"], "section_inspired_stitch")
+        self.assertEqual(result["similarity_level"], "medium-low")
+        self.assertEqual(captured[0]["candidates"], 3)
+        captured_analysis = captured[0]["analysis"]
+        self.assertEqual(captured_analysis["reference_similarity_level"], "medium-low")
+        self.assertEqual(captured_analysis["reference_transform"]["similarity_profile"]["id"], "medium_low")
+        self.assertEqual(captured_analysis["reference_transform"]["full_arrangement_generation"]["mode"], "section_inspired_stitch")
+        self.assertEqual(captured_analysis["genre"]["primary"], "underground tribal / deep tech house")
+        self.assertEqual(captured_analysis["vocals"]["role"], "none")
+        controls = captured_analysis["reference_transform"]["ace_preflight"]["hidden_controls"]
+        self.assertEqual(controls["route"], "source_conditioned_cover_section_inspired")
+        self.assertGreaterEqual(float(controls["reference_strength"]), 0.18)
+        self.assertGreaterEqual(float(controls["cover_noise_strength"]), 0.08)
+        task = _task_type(
+            captured_analysis["reference_transform"],
+            captured_analysis["reference_transform"]["groove_similarity"],
+        )
+        self.assertEqual(task, "cover")
+
+    def test_full_guide_audio_selects_best_passing_section_candidate(self):
+        old_full = os.environ.get("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE")
+        old_ace = os.environ.get("PROMPT2MIDI_ENABLE_ACE_STEP")
+        old_candidates = os.environ.get("PROMPT2MIDI_FULL_GUIDE_CANDIDATES")
+        os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = "1"
+        os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = "1"
+        os.environ["PROMPT2MIDI_FULL_GUIDE_CANDIDATES"] = "3"
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                bad = os.path.join(temp_dir, "bad-section.wav")
+                good = os.path.join(temp_dir, "good-section.wav")
+                for candidate in (bad, good):
+                    with open(candidate, "wb") as handle:
+                        handle.write(b"RIFF")
+
+                def fake_generate(**_kwargs):
+                    return {
+                        "status": "succeeded",
+                        "quality": {
+                            "score": 0.41,
+                            "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                        },
+                        "candidates": [
+                            {
+                                "path": bad,
+                                "quality": {
+                                    "score": 0.41,
+                                    "selection_score": 0.52,
+                                    "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                                },
+                            },
+                            {
+                                "path": good,
+                                "quality": {
+                                    "score": 0.74,
+                                    "selection_score": 0.82,
+                                    "level_gate": {"passed": True, "failures": []},
+                                },
+                            },
+                        ],
+                    }
+
+                stitched_inputs = []
+
+                def fake_concat(inputs, _output):
+                    stitched_inputs.extend(inputs)
+
+                with mock.patch("full_guide_audio._extract_wav"), mock.patch(
+                    "full_guide_audio._concat_wavs",
+                    side_effect=fake_concat,
+                ), mock.patch("full_guide_audio.generate_with_ace_step", side_effect=fake_generate):
+                    result = generate_full_arrangement_guide_audio(
+                        reference_audio="reference.wav",
+                        output_dir=temp_dir,
+                        analysis={"bpm": 129.2, "key": "D# major"},
+                        full_arrangement={
+                            "similarity_level": "medium",
+                            "arrangement_lock": {"review_required": False},
+                            "sections": [{"start_seconds": 0, "end_seconds": 8, "role": "groove"}],
+                        },
+                        user_prompt="",
+                    )
+        finally:
+            if old_full is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = old_full
+            if old_ace is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_ACE_STEP", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = old_ace
+            if old_candidates is None:
+                os.environ.pop("PROMPT2MIDI_FULL_GUIDE_CANDIDATES", None)
+            else:
+                os.environ["PROMPT2MIDI_FULL_GUIDE_CANDIDATES"] = old_candidates
+
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(stitched_inputs, [os.path.abspath(good)])
+        self.assertEqual(result["sections"][0]["selected_candidate"]["path"], os.path.abspath(good))
+        self.assertTrue(result["sections"][0]["selected_candidate"]["gate_passed"])
+
+    def test_full_guide_audio_stitches_best_degraded_section_by_default(self):
+        old_full = os.environ.get("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE")
+        old_ace = os.environ.get("PROMPT2MIDI_ENABLE_ACE_STEP")
+        old_strict = os.environ.get("PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS")
+        os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = "1"
+        os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = "1"
+        os.environ.pop("PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS", None)
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                bad = os.path.join(temp_dir, "bad-section.wav")
+                worse = os.path.join(temp_dir, "worse-section.wav")
+                for candidate in (bad, worse):
+                    with open(candidate, "wb") as handle:
+                        handle.write(b"RIFF")
+
+                def fake_generate(**_kwargs):
+                    return {
+                        "status": "succeeded",
+                        "quality": {
+                            "score": 0.51,
+                            "selection_score": 0.55,
+                            "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                        },
+                        "candidates": [
+                            {
+                                "path": worse,
+                                "quality": {
+                                    "score": 0.32,
+                                    "selection_score": 0.4,
+                                    "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                                },
+                            },
+                            {
+                                "path": bad,
+                                "quality": {
+                                    "score": 0.51,
+                                    "selection_score": 0.55,
+                                    "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                                },
+                            },
+                        ],
+                    }
+
+                stitched_inputs = []
+
+                def fake_concat(inputs, _output):
+                    stitched_inputs.extend(inputs)
+
+                with mock.patch("full_guide_audio._extract_wav"), mock.patch(
+                    "full_guide_audio._concat_wavs",
+                    side_effect=fake_concat,
+                ), mock.patch("full_guide_audio.generate_with_ace_step", side_effect=fake_generate):
+                    result = generate_full_arrangement_guide_audio(
+                        reference_audio="reference.wav",
+                        output_dir=temp_dir,
+                        analysis={"bpm": 129.2, "key": "D# major"},
+                        full_arrangement={
+                            "similarity_level": "medium",
+                            "arrangement_lock": {"review_required": False},
+                            "sections": [{"start_seconds": 0, "end_seconds": 8, "role": "groove"}],
+                        },
+                        user_prompt="",
+                    )
+        finally:
+            if old_full is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = old_full
+            if old_ace is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_ACE_STEP", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = old_ace
+            if old_strict is None:
+                os.environ.pop("PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS", None)
+            else:
+                os.environ["PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS"] = old_strict
+
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["quality_status"], "degraded")
+        self.assertEqual(stitched_inputs, [os.path.abspath(bad)])
+        self.assertEqual(result["sections"][0]["quality_status"], "degraded")
+        self.assertEqual(result["degraded_sections"][0]["index"], 1)
+        self.assertIn("degraded section", result["warnings"][0])
+
+    def test_full_guide_audio_rejects_failed_section_quality_gate_in_strict_mode(self):
+        old_full = os.environ.get("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE")
+        old_ace = os.environ.get("PROMPT2MIDI_ENABLE_ACE_STEP")
+        old_strict = os.environ.get("PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS")
+        os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = "1"
+        os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = "1"
+        os.environ["PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                candidate = os.path.join(temp_dir, "bad-section.wav")
+                with open(candidate, "wb") as handle:
+                    handle.write(b"RIFF")
+
+                def fake_generate(**_kwargs):
+                    return {
+                        "status": "succeeded",
+                        "selected_candidate": candidate,
+                        "quality": {
+                            "score": 0.41,
+                            "level_gate": {"passed": False, "failures": ["club pulse is too weak"]},
+                        },
+                        "candidates": [{"path": candidate}],
+                    }
+
+                with mock.patch("full_guide_audio._extract_wav"), mock.patch("full_guide_audio._concat_wavs"), mock.patch(
+                    "full_guide_audio.generate_with_ace_step",
+                    side_effect=fake_generate,
+                ):
+                    result = generate_full_arrangement_guide_audio(
+                        reference_audio="reference.wav",
+                        output_dir=temp_dir,
+                        analysis={"bpm": 129.2, "key": "D# major"},
+                        full_arrangement={
+                            "similarity_level": "medium",
+                            "arrangement_lock": {"review_required": False},
+                            "sections": [{"start_seconds": 0, "end_seconds": 8, "role": "groove"}],
+                        },
+                        user_prompt="",
+                    )
+        finally:
+            if old_full is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_FULL_ACE_GUIDE"] = old_full
+            if old_ace is None:
+                os.environ.pop("PROMPT2MIDI_ENABLE_ACE_STEP", None)
+            else:
+                os.environ["PROMPT2MIDI_ENABLE_ACE_STEP"] = old_ace
+            if old_strict is None:
+                os.environ.pop("PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS", None)
+            else:
+                os.environ["PROMPT2MIDI_FULL_GUIDE_REQUIRE_PASSING_SECTIONS"] = old_strict
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("strict mode", result["reason"])
+        self.assertEqual(result["failed_section"]["index"], 1)
 
     def test_model_transcription_can_be_explicitly_disabled(self):
         old_disable = os.environ.get("PROMPT2MIDI_DISABLE_MODEL")
@@ -524,6 +1078,60 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("continuous loud fast tribal percussion", requested)
         self.assertIn("first bar to last bar", requested)
         self.assertIn("congas", requested)
+
+    def test_detected_tribal_percussion_is_promoted_to_ace_caption(self):
+        analysis = {
+            "bpm": 129.2,
+            "key": "D# major",
+            "genre": {"primary": "tribal house", "tags": ["tribal house", "club"], "confidence": 0.7},
+            "drums": {
+                "method": "onset_detection",
+                "density": "dense",
+                "percussion_character": "tribal_percussion",
+                "hits_per_bar": 39.3,
+            },
+            "reference_transform": build_reference_transform("", {"reference_similarity_level": "medium-high"}),
+        }
+
+        caption = _caption("same tempo and key area as the reference", analysis)
+
+        self.assertIn("priority drum layer", caption)
+        self.assertIn("dense tribal percussion", caption)
+        self.assertIn("not sparse generic hats", caption)
+
+    def test_detected_tribal_percussion_raises_ace_source_hold(self):
+        transform = build_reference_transform(
+            "",
+            {
+                "reference_similarity_level": "medium-high",
+                "drums": {
+                    "method": "onset_detection",
+                    "density": "dense",
+                    "percussion_character": "tribal_percussion",
+                    "hits_per_bar": 39.3,
+                },
+            },
+        )
+        task = _task_type(transform, transform["groove_similarity"])
+        controls = _source_conditioning(transform, transform["groove_similarity"], is_cover=task == "cover")
+
+        self.assertEqual(task, "cover")
+        self.assertGreaterEqual(float(controls["reference_strength"]), 0.48)
+        self.assertGreaterEqual(float(controls["cover_noise_strength"]), 0.28)
+
+    def test_medium_confidence_key_is_not_overridden_by_noisy_chords(self):
+        transform = build_reference_transform(
+            "",
+            {
+                "bpm": 129.2,
+                "key": "D# major",
+                "key_confidence": 0.55,
+                "chords": {"confidence": 0.78, "progression": ["G", "B", "D", "G", "C", "G"]},
+            },
+        )
+
+        self.assertEqual(transform["style"]["key"], "D# major")
+        self.assertEqual(transform["harmonic"]["key"], "D# major")
 
     def test_very_high_profile_sits_between_high_and_near_identical(self):
         high = build_reference_transform("", {"reference_similarity_level": "high"})

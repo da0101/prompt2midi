@@ -11,6 +11,7 @@ import shutil
 import sys
 
 from bass_transcription import transcribe_bassline
+from beat_grid import analyze_beat_grid
 from chord_detection import detect_chords
 from composition import generate_inspired_loop
 from drum_analysis import analyze_drums, drum_pattern_to_midi_events
@@ -62,16 +63,27 @@ def run(
     analysis["allin1"] = analyze_allin1_structure(audio_path, output_dir)
     analysis["essentia"] = analyze_essentia_descriptors(audio_path, output_dir)
     _apply_essentia_overrides(analysis)
+    if (_number_or_none(analysis.get("duration_seconds")) or 0.0) >= 20.0 or os.environ.get("PROMPT2MIDI_FORCE_BEAT_GRID") == "1":
+        _progress("beat grid: estimating independent beat/downbeat fallback")
+        analysis["beat_grid"] = analyze_beat_grid(audio_path, analysis.get("bpm"))
+    else:
+        analysis["beat_grid"] = {
+            "available": False,
+            "method": "librosa_beat_track_downbeat_estimate",
+            "warnings": ["Beat-grid fallback skipped for short analysis audio."],
+        }
 
     _progress("deep analysis: detecting genre, chords, structure")
-    analysis["genre_deep"] = detect_genre(audio_path)
+    analysis["genre_deep"] = detect_genre(audio_path, progress=_progress)
     if analysis["genre_deep"]["confidence"] > 0.12:
         analysis["genre"] = {
             "primary": analysis["genre_deep"]["primary"],
             "tags": analysis["genre_deep"]["tags"],
             "confidence": analysis["genre_deep"]["confidence"],
         }
+    _progress("deep analysis: detecting chord progression")
     analysis["chords"] = detect_chords(audio_path, analysis.get("bpm") or 120.0)
+    _progress("deep analysis: detecting arrangement structure")
     allin1_structure = (analysis.get("allin1") or {}).get("structure")
     analysis["structure"] = allin1_structure if allin1_structure else analyze_structure(audio_path, analysis.get("bpm") or 120.0)
 
@@ -214,15 +226,24 @@ def run(
         output_dir=exports_dir,
         bars=32,
     )
-    sample_duration = _reference_sample_duration(analysis)
-    _progress(f"audio generation: preparing {sample_duration:.1f}-second reference-inspired sample")
-    composition["audio"] = generate_reference_sample(
-        reference_audio=audio_path,
-        output_dir=exports_dir,
-        prompt=user_prompt or (suno_prompt or {}).get("text") or "",
-        analysis=analysis,
-        duration_seconds=sample_duration,
-    )
+    if os.environ.get("PROMPT2MIDI_SKIP_REFERENCE_SAMPLE") == "1":
+        _progress("audio generation: short sample lane skipped because full Arrangement Lock guide is enabled")
+        composition["audio"] = {
+            "status": "skipped",
+            "provider": "audio_generation",
+            "sample": None,
+            "reason": "Skipped short sample generation because PROMPT2MIDI_SKIP_REFERENCE_SAMPLE=1.",
+        }
+    else:
+        sample_duration = _reference_sample_duration(analysis)
+        _progress(f"audio generation: preparing {sample_duration:.1f}-second reference-inspired sample")
+        composition["audio"] = generate_reference_sample(
+            reference_audio=audio_path,
+            output_dir=exports_dir,
+            prompt=user_prompt or (suno_prompt or {}).get("text") or "",
+            analysis=analysis,
+            duration_seconds=sample_duration,
+        )
 
     analysis["bass_transcription"] = {
         "event_count": len(bass["events"]),

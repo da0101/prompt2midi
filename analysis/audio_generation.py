@@ -440,7 +440,7 @@ def _bass_lock_direction(reference_transform: dict) -> str:
         return ""
     return (
         "bass lock: same bassline rhythm, same note lengths, same rests, same steady bass tone and envelope, "
-        "different bass pitch notes only; avoid glitchy bass, choppy bass, stutter bass, jumpy edits, and broken breakbeat bass behavior; "
+        "same bass rhythm accents, different bass pitch notes only; avoid glitchy bass, choppy bass, stutter bass, jumpy edits, and broken breakbeat bass behavior; "
     )
 
 

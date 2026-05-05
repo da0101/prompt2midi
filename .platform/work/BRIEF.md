@@ -5,7 +5,7 @@
 > Replace entirely when the active feature changes. Keep ≤60 lines.
 
 **Feature:** full-arrangement-proxy-v1
-**Status:** planning
+**Status:** in-progress
 **Stream file:** `work/full-arrangement-proxy-v1.md`
 
 ---
@@ -32,7 +32,7 @@ The user wants SUNO to follow a known song arrangement instead of inventing chee
 
 ## Current state
 
-The repo already contains a prototype scaffold: `analysis/external_analyzers.py` can call All-In-One/Essentia, `analysis/full_arrangement.py` writes structure artifacts, and `analysis/full_guide_audio.py` can cut sections and call ACE. It is not yet product-ready because it lacks reliable section audition, candidate selection, beat-safe stitching, continuity checks, per-section prompt tuning, and ACE failure prediction.
+Phase 1 Arrangement Lock analysis is implemented: `arrangement-map.json` now includes blueprint fidelity, section transition metadata, lock confidence, and review gating; `arrangement-lock-report.json` and `structure-debug.json` are written beside the report/prompt. It is not yet product-ready because it still needs real-reference validation, section cutting, section audition, candidate selection, beat-safe stitching, continuity checks, per-section prompt tuning, and ACE failure prediction.
 
 See `work/ACTIVE.md` for stream status.
 

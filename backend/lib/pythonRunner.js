@@ -122,7 +122,11 @@ function streamPythonLog(text, log) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     if (/warning/i.test(trimmed)) log.warn(trimmed);
-    else if (/^progress:/i.test(trimmed)) log.info(trimmed.replace(/^progress:\s*/i, ''));
+    else if (/^progress:/i.test(trimmed)) {
+      const message = trimmed.replace(/^progress:\s*/i, '');
+      if (typeof log.progress === 'function') log.progress(message);
+      else log.info(message);
+    }
     else log.info(`python: ${trimmed}`);
   }
 }
