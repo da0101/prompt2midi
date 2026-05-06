@@ -1,6 +1,6 @@
 # prompt2midi — Decision Log
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 > **Purpose:** capture the _why_ behind architectural, product, and tooling decisions so future AI sessions and developers don't have to re-derive them (or undo them).
 
@@ -32,6 +32,8 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 11 | 2026-05-05 | Docker scope | Use Docker only for fragile optional analyzer runtimes, starting with All-In-One-Fix/NATTEN; keep native analysis as the default reliable pipeline. | The user's machine already runs the main pipeline, while All-In-One failed on local NATTEN backend compatibility and is slow on CPU even in Docker. | Wrapping the whole product in Docker; making Docker mandatory for normal Arrangement Lock analysis. |
 | 12 | 2026-05-05 | Python package layout | Organize `analysis/` by responsibility and call moved modules through direct package paths with `python -m`; do not add importer-only compatibility shims. | The repo is preparing for production and the owner explicitly asked for cleaner folders without middleman importer files. | Keeping the flat namespace; adding shim files that only re-export moved modules. |
 | 13 | 2026-05-05 | Support folder layout | Group scripts, requirements, and docs by responsibility while preserving npm command names as the stable user-facing interface. | Production prep needs discoverable folders, but users should not have to memorize deep script paths for normal workflows. | Keeping a flat `scripts/` folder; adding compatibility wrapper scripts for old paths. |
+| 14 | 2026-05-06 | ACE output as stem/MIDI source | Split and map generated ACE output for reusable stems and MIDI; do not derive reusable music assets from the original reference track. | ACE output is the material the user can reuse legally, while reference audio is only inspiration/evidence. | Splitting the copyrighted reference into reusable stems; treating reference transcription as final material. |
+| 15 | 2026-05-06 | Dynamic stem roles | Detect instrument/stem roles from the generated audio and emit only justified stems/MIDI files. | Generated tracks may contain only drums+pads, bass+guitar, or other combinations, so a fixed stem list would create fake assets. | Hardcoding bass/drums/chords/melody for every output; emitting empty or misleading MIDI files for absent roles. |
 
 ---
 

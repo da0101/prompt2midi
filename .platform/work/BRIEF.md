@@ -2,53 +2,50 @@
 
 > Read this first every session. Keep <=60 lines.
 
-**Feature:** gemini-suno-prompt-v1
-**Status:** blocked
-**Stream file:** `work/gemini-suno-prompt-v1.md`
+**Feature:** stems-splitting-midi-mapping
+**Status:** planning
+**Stream file:** `work/stems-splitting-midi-mapping.md`
 
 ## What We're Building
 
-Real Gemini SUNO prompt verification remains the only active stream. Documentation/platform refresh is happening on `develop` to align README, architecture, domains, conventions, branch flow, and release ownership.
+Accurate stem splitting and source-aware MIDI mapping from generated ACE output. The reusable music source is the ACE-generated audio, not the original reference track.
 
 ## Why
 
-The repo now has a working local vertical slice plus optional generation/proxy paths. Agent memory must match the current architecture before more coding or release work.
+The current stem/MIDI path is useful evidence but weak. For production use, the system must listen to generated material, detect which musical roles actually exist, split those sources as well as possible, and emit only justified MIDI maps with honest confidence labels.
 
 ## Current State
 
-- `develop` is the default integration branch.
-- `main` is release-only for tagged releases.
-- `project-cleanup-restructure-v1` is closed and archived after PR #1.
-- `gemini-suno-prompt-v1` is blocked on a real `GEMINI_API_KEY` + WAV smoke test.
-- Stem splitting and MIDI mapping are useful but weak evidence paths; the next feature work should improve them.
-- Full JUCE AU/VST integration and DAW host QA are upcoming production-readiness work.
+- Branch: `feature/stems-splitting-midi-mapping` from `develop`.
+- New stream is in planning; do architecture/research before implementation.
+- `gemini-suno-prompt-v1` remains blocked on a real Gemini API smoke test.
+- `main` is release-only; merge feature PRs into `develop`.
 
-## Done Looks Like For Active Stream
+## Done Looks Like
 
-- Real-key Gemini smoke test succeeds.
-- Result includes `result.suno_prompt.path`.
-- `exports/prompt.txt` contains a real Gemini paragraph, not the Python stub.
-- Fallback behavior remains safe when Gemini is disabled/missing/fails.
+- ACE/generated output is the input to stem splitting and MIDI extraction.
+- Stem roles are dynamically detected, not hardcoded.
+- If generated audio only has drums+pads, only those stems/MIDI assets are emitted.
+- If generated audio only has bass+guitar, only those stems/MIDI assets are emitted.
+- Every emitted stem/MIDI asset includes source, method, confidence, and limitations.
+- Tests and at least one listening QA run prove the mapping is not fake/static.
 
 ## Locked Decisions
 
-- Core workflow stays local-first.
-- JUCE remains UI/client; no heavy work in `processBlock`.
-- Node owns orchestration and aggregation.
-- Python returns structured JSON and local file paths.
-- `develop` is default; `main` is release-only.
-- Open-source contributions are welcome, but extracted MIDI must be labeled honestly.
+- Reference audio is inspiration/evidence only, not the reusable music source.
+- Do not claim perfect transcription; label uncertainty.
+- Optional AI/listening models must be local-first where possible and fail soft.
+- JUCE remains client/UI; Python/Node own analysis and mapping.
 
 ## Relevant Context
 
-- `.platform/work/ACTIVE.md` — stream registry
-- `.platform/work/gemini-suno-prompt-v1.md` — active blocked stream
+- `.platform/work/stems-splitting-midi-mapping.md` — active stream
 - `.platform/architecture.md` — current system architecture
-- `.platform/conventions/git-flow.md` — branch/release flow
-- `.platform/domains/audio-analysis.md` — stem/MIDI limitations
-- `.platform/domains/local-orchestration.md` — backend flow
-- `.platform/domains/juce-plugin.md` — AU/VST/JUCE boundaries
-- `.platform/domains/llm-midi-generation.md` — Gemini/SUNO follow-up
+- `.platform/domains/audio-analysis.md` — stem/MIDI limitations and contracts
+- `.platform/domains/local-orchestration.md` — Node job/result contracts
+- `.platform/domains/composition-engine.md` — generated MIDI vs evidence distinction
+- `.platform/domains/juce-plugin.md` — UI/client display constraints
+- `analysis/midi/`, `analysis/generation/`, `analysis/arrangement/`, `analysis/reference/`
 
 **Do not load:** archived streams unless needed for historical rationale.
 **Never load:** `work/archive/*`

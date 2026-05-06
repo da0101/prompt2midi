@@ -39,6 +39,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - Status endpoint must represent queued/running/succeeded/failed/cancelled states.
 - Result endpoint returns analysis JSON, generated prose/prompt, local MIDI asset paths, and structured MIDI metadata when available. Clients must tolerate optional MIDI files because deeper extraction is capability-dependent.
 - Result metadata must make weak stem/MIDI evidence explicit so JUCE and web tooling can show review-needed labels instead of implying finished transcription.
+- ACE-output stem/MIDI mapping results should identify the generated audio source path, detected roles, emitted MIDI paths, omitted roles, confidence, and limitations.
 
 ## Key files
 

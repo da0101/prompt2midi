@@ -24,6 +24,8 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
 - Current weak area: stem splitting and MIDI mapping are useful evidence, but not yet production-grade. Demucs-style stems can bleed, full-mix transcription can overgenerate, and bass/drum/chord/melody ownership still needs stronger cleanup.
 - Next phases: improve stem/instrument separation, source-aware MIDI mapping, quantization, note filtering, register selection, and DAW-ready confidence labels.
+- For `stems-splitting-midi-mapping`, reusable stems and MIDI must come from ACE-generated output, not the original reference track.
+- Stem roles must be detected dynamically from audio content. A track with only drums+pads should not emit bass/guitar MIDI; a track with only bass+guitar should not emit drums/pads MIDI.
 - Demucs stem separation is an optional isolated engine in `.venv-stems`; dependency-free analysis and Basic Pitch full-mix analysis must still work when it is absent.
 - Drum-stem analysis computes onset rates per bar for kick, mid percussion, and high percussion. Long-track drum density must not be normalized by unique 16th-grid positions over the whole song; dense mid/high onset rates are promoted as `percussion_character: tribal_percussion` so ACE/SUNO prompts preserve conga/bongo/shaker-style movement.
 - All-In-One-Fix can run in an optional Docker worker for the fragile NATTEN/torch structure model path. Enable it with `PROMPT2MIDI_ENABLE_ALLIN1_DOCKER=1` or `--allin1-docker`; it is bounded by `PROMPT2MIDI_ALLIN1_DOCKER_TIMEOUT_SECONDS` (default 300s) and falls back to the internal librosa/heuristic arrangement analyzer on timeout or failure.
@@ -78,6 +80,7 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - Basic Pitch is an optional isolated engine; dependency-free analysis must still work when it is absent.
 - Demucs is the first optional source-separation strategy for bass-stem MIDI; it must degrade to warnings, not job failure.
 - Stems and MIDI maps are currently weak evidence paths. Improving their accuracy is planned feature work, not a solved architecture concern.
+- ACE-output stem/MIDI mapping is a separate contract from reference analysis. Reference traits can guide generation, but reusable MIDI/stems must be derived from generated material.
 - All-In-One structure analysis is optional and explicit opt-in via `PROMPT2MIDI_ENABLE_ALLIN1=1` or `PROMPT2MIDI_ALLIN1`. A local `.venv-allin1` can be discovered after opt-in, but if model/runtime dependencies fail, the pipeline must still emit the librosa beat-grid fallback and a warning instead of failing the job.
 - Docker is only for the All-In-One-Fix/NATTEN structure analyzer path that is unreliable on macOS. The reliable default remains native local analysis plus beat/downbeat fallback; Docker is a secondary comparison lane, not a required core dependency.
 - Arrangement Lock confidence scores timing/map quality. Vocal-hook or ACE/SUNO generation risk is still reported, but it must not lower the structure confidence by itself.

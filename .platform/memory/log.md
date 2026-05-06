@@ -5,6 +5,7 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-05-06 — stems-splitting-midi-mapping stream registered — created `feature/stems-splitting-midi-mapping` from `develop` and recorded ACE-output-as-source plus dynamic stem-role decisions — next work is architecture/research before implementation.
 - 2026-05-06 — documentation/platform refresh — README and `.platform` now describe current architecture, open-source positioning, DAW inspiration/pre-SUNO lanes, stem/MIDI limitations, JUCE AU/VST next work, CODEOWNERS, and `develop` default branch flow — keep public docs and agent memory aligned before more coding.
 - 2026-05-06 — git flow setup — created `develop` as the integration/default branch policy and reserved `main` for release merges/tags — feature streams should branch from `develop`.
 - 2026-05-05 — commit `78ccdae`: chore: reorganize project cleanup layout — auto-logged
