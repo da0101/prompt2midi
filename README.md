@@ -6,6 +6,13 @@ prompt2midi analyzes a reference track, turns the musical evidence into producer
 
 The product goal is not to copy songs. It is a pre-production tool for making new material from reference traits: tempo, key, groove, drum feel, bass movement, arrangement energy, and production language.
 
+prompt2midi is open source. Producers, artists, engineers, researchers, and tool builders are welcome to contribute.
+
+There are two main ways to use it:
+
+- **DAW inspiration starter:** generate editable ideas, MIDI, arrangement notes, and prompts that a producer can continue shaping in Ableton, Logic, FL Studio, Bitwig, or any other DAW.
+- **Pre-SUNO tool:** turn an inspired idea/reference into a cleaner prompt, structure guide, and optional proxy package that an artist can finish in SUNO or continue developing locally.
+
 ## Current Status
 
 The repo already contains a working local vertical slice:
@@ -16,7 +23,7 @@ The repo already contains a working local vertical slice:
 - Deterministic inspired-loop generator that writes `bass.mid`, `drums.mid`, `chords.mid`, `melody.mid`, `full_loop.mid`, `summary.json`, and `prompt.txt`.
 - Optional model paths for Basic Pitch, Demucs, CLAP genre detection, Gemini Suno prompt generation, ACE-Step, and MusicGen.
 
-This is still an MVP/research codebase. Some outputs are production useful, but many model and transcription outputs are explicitly labeled as estimates or editable starting points.
+This is still an MVP/research codebase. Some outputs are production useful, but model transcription, stem splitting, and MIDI mapping are still weak in places and should be treated as editable evidence, not finished arrangements. Improving stem separation, source-aware MIDI mapping, and full JUCE AU/VST integration are the next major production-readiness features.
 
 ## Branch Flow
 
@@ -32,8 +39,9 @@ Producers often know what they like about a reference record but cannot quickly 
 1. Drop in a reference track.
 2. Extract musical facts and evidence.
 3. Generate original MIDI parts that match the useful traits, not the exact song.
-4. Generate a clear AI-music prompt for Suno or similar tools.
-5. Optionally render a local 30-second reference-inspired sample before uploading anything elsewhere.
+4. Generate a clear AI-music prompt for SUNO or similar tools.
+5. Optionally render a local reference-inspired sample before uploading anything elsewhere.
+6. Finish the idea either inside a DAW or inside SUNO.
 
 When a generation service rejects direct artist/song prompts, the correct workflow is not to bypass the filter. prompt2midi uses the reference to identify neutral production traits, then creates new musical assets and a prompt that avoids artist imitation, copied hooks, lyrics, and vocal likeness.
 
@@ -45,6 +53,32 @@ Example framing:
 The tool is designed to reduce copying risk by creating original material and by describing musical traits instead of requesting a clone. It does not guarantee legal clearance, does not replace rights review, and should not be used to bypass copyright or platform policies.
 
 ## Architecture
+
+prompt2midi is a local-first desktop production system. The plugin is only the DAW-facing client; the local backend owns job orchestration; Python owns audio intelligence and generation helpers; optional model services improve output quality without becoming required for the core workflow.
+
+```mermaid
+flowchart TD
+  Producer["Producer in Ableton Live"] --> Plugin["JUCE plugin UI<br/>file/prompt input, progress, result display"]
+  Plugin -->|POST /analyze| Node["Local Node backend<br/>127.0.0.1:47321"]
+  Node --> Jobs["Job store + progress events<br/>queued/running/succeeded/failed"]
+  Node --> Decode["Input validation + FFmpeg MP3 decode<br/>WAV passed to Python"]
+  Decode --> Python["Python analysis package<br/>analysis/analyze.py"]
+  Python --> Core["Core facts<br/>BPM, key, loudness, energy, spectral features"]
+  Python --> Deep["Optional deeper analysis<br/>chords, drums, structure, stems, transcription"]
+  Python --> Compose["Original composition package<br/>bass/drums/chords/melody/full_loop MIDI"]
+  Python --> Arrange["Arrangement Lock / full-track proxy<br/>maps, reports, guide MIDI, proxy audio"]
+  Compose --> Exports["Local exports<br/>MIDI, summary.json, prompt.txt"]
+  Arrange --> Exports
+  Python --> Node
+  Node --> Prompt["Prompt layer<br/>deterministic local prompt + optional Gemini SUNO prompt"]
+  Node --> Result["Aggregated result JSON<br/>analysis, warnings, assets, prompts, paths"]
+  Result --> Plugin
+  Plugin --> DAW["Producer actions<br/>audition, copy prompt, import MIDI, package for SUNO"]
+
+  ACE["Optional local ACE-Step API<br/>127.0.0.1:8001"] -. audio candidates .-> Arrange
+  Models["Optional local engines<br/>Basic Pitch, Demucs, CLAP, MusicGen, All-In-One Docker"] -. evidence .-> Deep
+  Gemini["Optional cloud Gemini<br/>GEMINI_API_KEY"] -. SUNO prompt .-> Prompt
+```
 
 ```text
 Ableton / JUCE plugin
@@ -65,6 +99,15 @@ Node aggregation
         v
 JUCE result display
 ```
+
+### Runtime Flow
+
+1. The producer selects a WAV/MP3 reference and/or enters a direction in the plugin.
+2. The JUCE client posts the request to the localhost Node backend and keeps the audio thread pass-through.
+3. Node validates local paths, decodes MP3 to WAV when needed, creates a job, and publishes progress events.
+4. Python analyzes the WAV, writes structured JSON, MIDI evidence, composition assets, and optional arrangement/proxy artifacts.
+5. Node aggregates the Python result with producer-facing prompt text and optional Gemini SUNO text.
+6. The plugin polls status/result and displays confidence-aware output paths, warnings, and copy/export actions.
 
 ### Component Responsibilities
 
@@ -136,7 +179,7 @@ Optional CLAP genre detection uses `laion/larger_clap_music` through `transforme
 
 ### 4. Stem and MIDI Evidence
 
-Every MIDI file is labeled by source and confidence.
+Every MIDI file is labeled by source and confidence. This area is intentionally conservative: stem splitting and MIDI mapping exist, but they are not yet production-grade. They are useful for evidence, sketching, and direction, but the next feature work should improve source separation, note assignment, timing cleanup, and DAW-ready mapping.
 
 | Asset | How it is made | Meaning |
 |---|---|---|
@@ -154,6 +197,20 @@ tmp/jobs/<job_id>/exports/
 ```
 
 The code intentionally distinguishes generated MIDI from transcription evidence. This matters because only source-aware paths should be described as source-aware.
+
+Current limitations:
+
+- Demucs-style stem splitting can bleed bass, drums, vocals, and harmonic material into each other.
+- Full-mix model transcription often produces extra notes and wrong instrument ownership.
+- Bass, drum, chord, and melody mappings still need stronger source-aware cleanup before they should be considered arrangement-ready.
+- All extracted MIDI should be auditioned and edited in Ableton before being used as final material.
+
+Next work:
+
+- Improve stem-aware bass, drum, chord, and melody extraction.
+- Improve mapping from analysis evidence into separate DAW tracks.
+- Tighten quantization, note filtering, register selection, and confidence labels.
+- Complete JUCE integration for real AU/VST plugin workflows, including more polished import/export behavior.
 
 ### 5. Reference Transformation
 
@@ -270,6 +327,19 @@ It should not:
 - Tell users that a generated sample is automatically safe to upload commercially.
 
 Use references you own, created, licensed, or are otherwise allowed to analyze. Treat the generated Suno prompt and local sample as a safer creative starting point, not legal advice.
+
+## Contributing
+
+This is an open-source project and contributions are welcome. Useful areas include:
+
+- stronger stem separation and source-aware MIDI mapping
+- better AU/VST/JUCE host integration
+- Ableton, Logic, and other DAW workflow testing
+- prompt packaging for SUNO and other music tools
+- audio-analysis fixtures and regression tests
+- documentation, examples, setup scripts, and UX polish
+
+Branch from `develop`, keep changes local-first, and label extracted MIDI honestly when confidence is limited.
 
 ## Running Locally
 

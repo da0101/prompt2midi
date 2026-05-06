@@ -66,5 +66,5 @@ ab checkpoint <stream-slug> --what "<what changed>" --next "<next action>" --pro
 
 ## Current State
 
-Vertical-slice implementation streams have shipped the local backend, Python analysis, inspired loop engine, and full arrangement proxy. Active work is production cleanup: keep the local-first JUCE -> Node -> Python boundary, organize code by domain, and verify imports with tests after file moves.
+Vertical-slice implementation streams have shipped the local backend, Python analysis, inspired loop engine, full arrangement proxy, and project cleanup/restructure. The current baseline is open source, uses `develop` as the default branch, and reserves `main` for tagged releases. Next production work is stronger stem/MIDI mapping, full JUCE AU/VST integration, and a real Gemini SUNO prompt smoke test.
 <!-- agentboard:root-entry:end v=1 -->

@@ -5,7 +5,7 @@ status: active
 repo_ids: [prompt2midi]
 related_domain_slugs: [audio-analysis, juce-plugin, llm-midi-generation]
 created_at: 2026-04-28
-updated_at: 2026-04-28
+updated_at: 2026-05-06
 ---
 
 # local-orchestration
@@ -22,7 +22,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
   - `GET /result`
 - Node owns job queue/state, MP3/WAV boundary validation, FFmpeg MP3 decoding, Python process invocation, deterministic prompt generation, and result aggregation.
 - Node passes through `midi_files` and structured `midi_assets` from Python, including generated sketches, optional Basic Pitch model transcription, optional Demucs stem-aware bass transcription, and heuristic fallbacks.
-- Development scripts include `npm run dev:refresh` for rebuild + backend restart + live logs, `npm run setup:transcription` for Basic Pitch, and `npm run setup:stems` for the optional Demucs stem engine.
+- Development scripts include `npm run dev:refresh`, `npm run web:dev`, pipeline runners under `scripts/pipelines/*`, setup scripts under `scripts/setup/*`, and packaging helpers under `scripts/packaging/*`.
 - WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 
@@ -38,6 +38,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - Long jobs return a job id quickly.
 - Status endpoint must represent queued/running/succeeded/failed/cancelled states.
 - Result endpoint returns analysis JSON, generated prose/prompt, local MIDI asset paths, and structured MIDI metadata when available. Clients must tolerate optional MIDI files because deeper extraction is capability-dependent.
+- Result metadata must make weak stem/MIDI evidence explicit so JUCE and web tooling can show review-needed labels instead of implying finished transcription.
 
 ## Key files
 
@@ -60,3 +61,4 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - Node is the API gateway and aggregation layer.
 - Job status/progress are product features, not internal logs.
 - The plugin should be able to recover gracefully if the local backend is not running.
+- Optional engines and cloud prompt calls must fail soft and preserve the base local analysis/composition path.

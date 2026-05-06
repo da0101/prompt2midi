@@ -5,6 +5,7 @@ Last updated: 2026-05-06
 ## Branch Roles
 
 - `develop` is the integration branch and default working base.
+- `develop` is the GitHub default branch.
 - `main` is release-only and should match the latest tagged release candidate or release.
 - Feature branches start from `develop` and merge back into `develop`.
 - Release promotion is `develop` -> `main`, followed by an annotated version tag.

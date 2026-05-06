@@ -1,6 +1,6 @@
 # API Conventions
 
-Last updated: 2026-04-28
+Last updated: 2026-05-06
 
 ## Scope
 
@@ -19,6 +19,8 @@ Applies to the local API between JUCE and Node.
 - Use stable top-level fields for `job_id`, `status`, `progress`, `error`, and `result`.
 - Status values should cover queued, running, succeeded, failed, and cancelled.
 - Result shape must preserve Phase 1 fields even as later phases add sections, instruments, chords, and MIDI files.
+- Result shape must include confidence/provenance for MIDI assets. Weak stem or transcription evidence must be labeled as review-needed rather than final.
+- Optional Gemini/ACE/ML outputs may be absent; clients must tolerate missing optional fields.
 
 ## Error rules
 
