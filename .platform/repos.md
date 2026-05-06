@@ -22,6 +22,7 @@ This is currently a single-repo project. If Node or Python become sibling repos 
 | Local-first security/secrets/audio files | `conventions/security.md` |
 | Tests | `conventions/testing.md` |
 | Build/release/rollback | `conventions/deployment.md` |
+| Branching / release flow | `conventions/git-flow.md` |
 | Plugin UX/manual QA | `conventions/qa.md` |
 | Product scope/user value | `conventions/pm.md` |
 

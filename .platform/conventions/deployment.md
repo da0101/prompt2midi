@@ -8,6 +8,7 @@ No formal release pipeline exists. The current project is a JUCE `.jucer` with a
 
 ## Rules
 
+- Use `develop` as the integration branch. Feature branches merge into `develop`; release merges go from `develop` into `main` and then get tagged.
 - Document exact local build commands once the first working build path is confirmed.
 - Keep plugin packaging separate from backend runtime packaging decisions.
 - Before release, define whether AU, VST3, standalone, or all are required.

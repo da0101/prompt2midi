@@ -33,6 +33,8 @@ At session start, run `ab brief`, then read `.platform/work/BRIEF.md` and `.plat
 
 For non-trivial work, follow `.platform/workflow.md`: triage, research, plan, execute, verify, record/handoff.
 
+Branch flow: `develop` is the integration branch and default feature base. Create feature branches from `develop`, merge feature PRs back into `develop`, and reserve `main` for release merges from `develop` plus version tags.
+
 Before ending a meaningful session, checkpoint the active stream:
 
 ```bash

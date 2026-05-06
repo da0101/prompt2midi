@@ -18,6 +18,13 @@ The repo already contains a working local vertical slice:
 
 This is still an MVP/research codebase. Some outputs are production useful, but many model and transcription outputs are explicitly labeled as estimates or editable starting points.
 
+## Branch Flow
+
+- `develop` is the default integration branch for daily work.
+- Feature branches start from `develop` and merge back into `develop`.
+- `main` is release-only. When `develop` is ready to ship, merge `develop` into `main` and create a version tag.
+- Do not open normal feature PRs directly into `main`.
+
 ## Why It Exists
 
 Producers often know what they like about a reference record but cannot quickly turn that into reusable production material. prompt2midi closes that gap:
