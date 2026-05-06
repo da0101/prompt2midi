@@ -1,0 +1,416 @@
+#pragma once
+
+#include <JuceHeader.h>
+
+namespace prompt2midi
+{
+inline juce::String requestJson (const juce::String& url, const juce::String& postBody = {})
+{
+    juce::URL request (url);
+
+    if (postBody.isNotEmpty())
+    {
+        request = request.withPOSTData (postBody);
+        auto stream = request.createInputStream (
+            juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                .withConnectionTimeoutMs (3000)
+                .withExtraHeaders ("Content-Type: application/json\r\n"));
+        return stream != nullptr ? stream->readEntireStreamAsString() : juce::String();
+    }
+
+    auto stream = request.createInputStream (
+        juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+            .withConnectionTimeoutMs (3000));
+    return stream != nullptr ? stream->readEntireStreamAsString() : juce::String();
+}
+
+inline juce::String escapeJson (const juce::String& value)
+{
+    juce::String escaped;
+    for (auto character : value)
+    {
+        if (character == '\\' || character == '"')
+            escaped << '\\' << character;
+        else if (character == '\n')
+            escaped << "\\n";
+        else if (character == '\r')
+            escaped << "\\r";
+        else if (character == '\t')
+            escaped << "\\t";
+        else
+            escaped << character;
+    }
+    return escaped;
+}
+
+inline juce::String propertyString (const juce::var& object, const juce::String& name)
+{
+    if (auto* dynamicObject = object.getDynamicObject())
+        return dynamicObject->getProperty (juce::Identifier (name)).toString();
+
+    return {};
+}
+
+inline juce::String confidenceLabel (const juce::String& raw)
+{
+    auto value = raw.getDoubleValue();
+    if (value >= 0.7)
+        return "high";
+    if (value >= 0.4)
+        return "medium";
+    if (value > 0.0)
+        return "low";
+    return "unavailable";
+}
+
+inline void appendStringArray (juce::String& output, const juce::var& value, const juce::String& prefix)
+{
+    if (auto* array = value.getArray())
+        for (const auto& item : *array)
+            output << prefix << item.toString() << "\n";
+}
+
+inline juce::String eventPrefix (const juce::String& type)
+{
+    if (type == "done" || type == "complete")
+        return "DONE";
+    if (type == "stage")
+        return "STEP";
+    if (type == "warning")
+        return "WARN";
+    if (type == "failed")
+        return "FAIL";
+    return "INFO";
+}
+
+inline juce::String summarizeStatus (const juce::var& root)
+{
+    auto* rootObject = root.getDynamicObject();
+    if (rootObject == nullptr)
+        return "Waiting for backend status...";
+
+    auto status = rootObject->getProperty ("status").toString();
+    auto progress = rootObject->getProperty ("progress").toString();
+    auto message = rootObject->getProperty ("message").toString();
+    auto events = rootObject->getProperty ("events");
+
+    juce::String output;
+    output << "STATUS";
+    if (status.isNotEmpty())
+        output << ": " << status;
+    if (progress.isNotEmpty())
+        output << " (" << progress << "%)";
+    output << "\n";
+    if (message.isNotEmpty())
+        output << message << "\n";
+
+    if (auto* eventArray = events.getArray())
+    {
+        output << "\nPIPELINE\n";
+        for (const auto& event : *eventArray)
+        {
+            auto* object = event.getDynamicObject();
+            if (object == nullptr)
+                continue;
+
+            auto type = object->getProperty ("type").toString();
+            auto label = object->getProperty ("label").toString();
+            auto detail = object->getProperty ("detail").toString();
+
+            output << eventPrefix (type) << "  " << label;
+            if (detail.isNotEmpty())
+                output << " - " << detail;
+            output << "\n";
+        }
+    }
+    else
+    {
+        output << "\nPipeline events will appear here once analysis starts.\n";
+    }
+
+    return output;
+}
+
+inline juce::String summarizeComposition (const juce::var& composition, juce::String& promptForClipboard, const juce::var& sunoPrompt)
+{
+    auto* compObject = composition.getDynamicObject();
+    if (compObject == nullptr)
+        return {};
+
+    auto bars    = compObject->getProperty ("bars").toString();
+    auto bpm     = compObject->getProperty ("bpm").toString();
+    auto key     = compObject->getProperty ("key").toString();
+    auto style   = compObject->getProperty ("style").toString();
+    auto midi    = compObject->getProperty ("midi");
+    auto audio   = compObject->getProperty ("audio");
+    auto desc    = compObject->getProperty ("description");
+
+    juce::String output;
+    output << "Generated Loop Package\n";
+    output << "Style: "  << (style.isNotEmpty() ? style : "unknown") << "\n";
+    output << "BPM: "    << (bpm.isNotEmpty()   ? bpm   : "unknown") << "\n";
+    output << "Key: "    << (key.isNotEmpty()    ? key   : "unknown") << "\n";
+    output << "Bars: "   << (bars.isNotEmpty()   ? bars  : "32")      << "\n\n";
+
+    if (auto* midiObject = midi.getDynamicObject())
+    {
+        output << "Files:\n";
+        for (const juce::String& track : { juce::String ("bass"), juce::String ("drums"),
+                                           juce::String ("chords"), juce::String ("melody"),
+                                           juce::String ("full_loop") })
+        {
+            auto filePath = midiObject->getProperty (track).toString();
+            if (filePath.isNotEmpty())
+                output << "  " << track << ": " << filePath << "\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* audioObject = audio.getDynamicObject())
+    {
+        auto status = audioObject->getProperty ("status").toString();
+        auto samplePath = audioObject->getProperty ("sample").toString();
+        auto duration = audioObject->getProperty ("duration_seconds").toString();
+        auto provider = audioObject->getProperty ("provider").toString();
+        auto model = audioObject->getProperty ("model").toString();
+        auto reviewStatus = audioObject->getProperty ("review_status").toString();
+        auto manifestPath = audioObject->getProperty ("candidate_manifest").toString();
+        output << "Audio Generation:\n";
+        output << "  status: " << (status.isNotEmpty() ? status : "unknown") << "\n";
+        if (reviewStatus.isNotEmpty())
+            output << "  review: " << reviewStatus << "\n";
+        output << "  provider: " << (provider.isNotEmpty() ? provider : "unknown") << "\n";
+        if (model.isNotEmpty())
+            output << "  model: " << model << "\n";
+        if (manifestPath.isNotEmpty())
+            output << "  candidate manifest: " << manifestPath << "\n";
+        if (auto* candidates = audioObject->getProperty ("candidates").getArray())
+        {
+            if (! candidates->isEmpty())
+            {
+                output << "  candidates:\n";
+                for (int index = 0; index < candidates->size(); ++index)
+                {
+                    if (auto* candidate = candidates->getReference (index).getDynamicObject())
+                    {
+                        auto path = candidate->getProperty ("path").toString();
+                        if (path.isNotEmpty())
+                            output << "    " << (index + 1) << ": " << path << "\n";
+                    }
+                }
+            }
+        }
+        if (samplePath.isNotEmpty())
+        {
+            output << "  sample: " << samplePath << "\n";
+            output << "  duration: " << (duration.isNotEmpty() ? duration : "30") << " seconds\n";
+        }
+        else
+        {
+            output << "  sample: awaiting user candidate choice\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* descObject = desc.getDynamicObject())
+    {
+        output << "Track notes:\n";
+        for (const juce::String& track : { juce::String ("bass"), juce::String ("drums"),
+                                           juce::String ("chords"), juce::String ("melody") })
+        {
+            auto note = descObject->getProperty (track).toString();
+            if (note.isNotEmpty())
+                output << "  " << track << ": " << note << "\n";
+        }
+        output << "\n";
+    }
+
+    if (auto* sunoObject = sunoPrompt.getDynamicObject())
+    {
+        promptForClipboard = sunoObject->getProperty ("text").toString();
+        if (promptForClipboard.isNotEmpty())
+        {
+            output << "─────────────────────────────────────\n";
+            output << "SUNO Prompt  (copy and paste into SUNO)\n";
+            output << "─────────────────────────────────────\n";
+            output << promptForClipboard << "\n";
+        }
+    }
+
+    return output;
+}
+
+inline juce::String summarizeFullArrangement (const juce::var& fullArrangement)
+{
+    auto* fullObject = fullArrangement.getDynamicObject();
+    if (fullObject == nullptr)
+        return {};
+
+    auto status = fullObject->getProperty ("status").toString();
+    if (status.isEmpty())
+        return {};
+
+    auto sections = fullObject->getProperty ("section_count").toString();
+    auto bars = fullObject->getProperty ("total_bars").toString();
+    auto level = fullObject->getProperty ("similarity_level").toString();
+    auto paths = fullObject->getProperty ("paths");
+
+    juce::String output;
+    output << "Full Song SUNO Control Package\n";
+    output << "Status: " << status << "\n";
+    if (level.isNotEmpty())
+        output << "Similarity: " << level << "\n";
+    if (bars.isNotEmpty())
+        output << "Bars: " << bars << "\n";
+    if (sections.isNotEmpty())
+        output << "Sections: " << sections << "\n";
+
+    if (auto* lockObject = fullObject->getProperty ("arrangement_lock").getDynamicObject())
+    {
+        auto lockStatus = lockObject->getProperty ("status").toString();
+        auto lockConfidence = lockObject->getProperty ("confidence").toString();
+        auto lockSummary = lockObject->getProperty ("summary").toString();
+        if (lockStatus.isNotEmpty())
+            output << "Arrangement Lock: " << lockStatus;
+        if (lockConfidence.isNotEmpty())
+            output << " (" << lockConfidence << " confidence)";
+        if (lockStatus.isNotEmpty() || lockConfidence.isNotEmpty())
+            output << "\n";
+        if (lockSummary.isNotEmpty())
+            output << lockSummary << "\n";
+    }
+
+    if (auto* pathsObject = paths.getDynamicObject())
+    {
+        output << "Files:\n";
+        for (const juce::String& key : { juce::String ("arrangement_map"),
+                                         juce::String ("arrangement_lock_report"),
+                                         juce::String ("structure_debug"),
+                                         juce::String ("analysis_report"),
+                                         juce::String ("suno_structure_prompt"),
+                                         juce::String ("full_arrangement_guide_midi") })
+        {
+            auto filePath = pathsObject->getProperty (key).toString();
+            if (filePath.isNotEmpty())
+                output << "  " << key << ": " << filePath << "\n";
+        }
+    }
+
+    if (auto* guideAudio = fullObject->getProperty ("guide_audio").getDynamicObject())
+    {
+        auto audioStatus = guideAudio->getProperty ("status").toString();
+        auto reason = guideAudio->getProperty ("reason").toString();
+        if (audioStatus.isNotEmpty())
+            output << "Guide audio: " << audioStatus << "\n";
+        if (reason.isNotEmpty())
+            output << "  " << reason << "\n";
+    }
+
+    output << "\n";
+    return output;
+}
+
+inline juce::String summarizeResult (const juce::var& root, juce::String& promptForClipboard)
+{
+    auto* rootObject = root.getDynamicObject();
+    if (rootObject == nullptr)
+        return "The backend returned an unreadable response.";
+
+    auto result = rootObject->getProperty ("result");
+    auto* resultObject = result.getDynamicObject();
+    if (resultObject == nullptr)
+        return "The backend returned no result object.";
+
+    auto analysis     = resultObject->getProperty ("analysis");
+    auto composition  = resultObject->getProperty ("composition");
+    auto fullArrangement = resultObject->getProperty ("full_arrangement");
+    auto sunoPrompt   = resultObject->getProperty ("suno_prompt");
+    auto interpretation = resultObject->getProperty ("interpretation");
+    auto midiNotes    = resultObject->getProperty ("midi_notes");
+
+    auto bpm           = propertyString (analysis, "bpm");
+    auto key           = propertyString (analysis, "key");
+    auto bpmConfidence = propertyString (analysis, "bpm_confidence");
+    auto keyConfidence = propertyString (analysis, "key_confidence");
+    auto genre         = analysis.getDynamicObject()
+                             ? analysis.getDynamicObject()->getProperty ("genre")
+                             : juce::var();
+    auto groove        = analysis.getDynamicObject()
+                             ? analysis.getDynamicObject()->getProperty ("groove")
+                             : juce::var();
+
+    juce::String output;
+
+    // Reference analysis header
+    output << "Reference Analysis\n";
+    output << "BPM: " << (bpm.isNotEmpty() ? bpm : "unknown");
+    if (bpmConfidence.isNotEmpty())
+        output << "  (" << confidenceLabel (bpmConfidence) << " confidence)";
+    output << "\n";
+    output << "Key: " << (key.isNotEmpty() ? key : "unknown");
+    if (keyConfidence.isNotEmpty())
+        output << "  (" << confidenceLabel (keyConfidence) << " confidence)";
+    output << "\n";
+
+    if (auto* genreObject = genre.getDynamicObject())
+    {
+        auto primary = genreObject->getProperty ("primary").toString();
+        auto method  = genreObject->getProperty ("method").toString();
+        if (primary.isNotEmpty())
+        {
+            output << "Tempo range: " << primary;
+            if (method.containsIgnoreCase ("bpm_range"))
+                output << "  (BPM estimate — actual genre unknown without classifier)";
+            output << "\n";
+        }
+    }
+
+    if (auto* grooveObject = groove.getDynamicObject())
+    {
+        auto desc = grooveObject->getProperty ("description").toString();
+        if (desc.isNotEmpty())
+            output << "Groove: " << desc << "\n";
+    }
+    output << "\n";
+
+    // Only show warnings that are genuinely user-relevant (filter technical impl notes)
+    auto warnings = analysis.getDynamicObject() != nullptr
+        ? analysis.getDynamicObject()->getProperty ("warnings")
+        : juce::var();
+    if (auto* warningArray = warnings.getArray())
+    {
+        bool wroteWarning = false;
+        for (const auto& w : *warningArray)
+        {
+            auto text = w.toString();
+            if (text.containsIgnoreCase ("Phase 1") || text.containsIgnoreCase ("Phase 2")
+                || text.containsIgnoreCase ("not source-track") || text.containsIgnoreCase ("rough tonal")
+                || text.containsIgnoreCase ("Stem separation skipped"))
+                continue;
+            output << "Note: " << text << "\n";
+            wroteWarning = true;
+        }
+        if (wroteWarning)
+            output << "\n";
+    }
+
+    // Generated loop package (primary product output)
+    juce::String compBlock = summarizeComposition (composition, promptForClipboard, sunoPrompt);
+    if (compBlock.isNotEmpty())
+    {
+        output << compBlock;
+        output << summarizeFullArrangement (fullArrangement);
+    }
+    else
+    {
+        // Fallback: show producer prompt from old path when no composition available
+        auto summary = propertyString (interpretation, "producer_summary");
+        auto aiPrompt = propertyString (interpretation, "ai_music_prompt");
+        promptForClipboard = aiPrompt;
+        output << "Producer insight:\n" << summary << "\n\n";
+        output << "AI music prompt:\n" << aiPrompt << "\n\n";
+    }
+
+    return output;
+}
+}

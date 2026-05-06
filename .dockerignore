@@ -1,0 +1,12 @@
+.cache
+.git
+.venv*
+Builds
+node_modules
+tmp
+*.aif
+*.aiff
+*.flac
+*.mp3
+*.wav
+*.zip
