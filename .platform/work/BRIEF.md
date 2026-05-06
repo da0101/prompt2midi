@@ -2,57 +2,53 @@
 
 > Read this first every session. Keep <=60 lines.
 
-**Feature:** project-cleanup-restructure-v1
-**Status:** in-progress
-**Stream file:** `work/project-cleanup-restructure-v1.md`
+**Feature:** gemini-suno-prompt-v1
+**Status:** blocked
+**Stream file:** `work/gemini-suno-prompt-v1.md`
 
 ## What We're Building
 
-Production-readiness cleanup and repository restructuring before the next coding push.
+Real Gemini SUNO prompt verification remains the only active stream. Documentation/platform refresh is happening on `develop` to align README, architecture, domains, conventions, branch flow, and release ownership.
 
 ## Why
 
-The repo grew through fast experiments. We need clearer ownership boundaries, fewer runtime artifacts in git, and stable commands before production preparation continues.
-
-## Done Looks Like
-
-- `analysis/` is grouped by responsibility and uses direct package imports.
-- Confirmed dead/generated tracked files are removed and ignored.
-- Node/Python entry points use stable commands and `python -m analysis...`.
-- Docs, scripts, requirements, and Agentboard references match the new layout.
-- Verification is green after file moves.
-
-## Locked Decisions
-
-- No importer-only shim files.
-- Keep local-first architecture: JUCE client -> Node orchestration -> Python analysis/generation.
-- Keep Python structured JSON contracts stable during module splits.
+The repo now has a working local vertical slice plus optional generation/proxy paths. Agent memory must match the current architecture before more coding or release work.
 
 ## Current State
 
-- `project-cleanup-restructure-v1` — active cleanup stream, implementation and verification green; final audit/commit pending.
-- `gemini-suno-prompt-v1` — blocked on real Gemini API smoke test with a WAV.
-- `deep-analysis-v1` — closed as superseded on 2026-05-05; open a fresh verification stream if real-audio deep-analysis QA becomes next priority.
+- `develop` is the default integration branch.
+- `main` is release-only for tagged releases.
+- `project-cleanup-restructure-v1` is closed and archived after PR #1.
+- `gemini-suno-prompt-v1` is blocked on a real `GEMINI_API_KEY` + WAV smoke test.
+- Stem splitting and MIDI mapping are useful but weak evidence paths; the next feature work should improve them.
+- Full JUCE AU/VST integration and DAW host QA are upcoming production-readiness work.
 
-See `work/ACTIVE.md` for stream status.
+## Done Looks Like For Active Stream
+
+- Real-key Gemini smoke test succeeds.
+- Result includes `result.suno_prompt.path`.
+- `exports/prompt.txt` contains a real Gemini paragraph, not the Python stub.
+- Fallback behavior remains safe when Gemini is disabled/missing/fails.
+
+## Locked Decisions
+
+- Core workflow stays local-first.
+- JUCE remains UI/client; no heavy work in `processBlock`.
+- Node owns orchestration and aggregation.
+- Python returns structured JSON and local file paths.
+- `develop` is default; `main` is release-only.
+- Open-source contributions are welcome, but extracted MIDI must be labeled honestly.
 
 ## Relevant Context
 
 - `.platform/work/ACTIVE.md` — stream registry
-- `.platform/work/project-cleanup-restructure-v1.md` — current cleanup stream
-- `.platform/domains/audio-analysis.md` — `analysis/` layout
-- `.platform/domains/local-orchestration.md` — backend/scripts flow
-- `.platform/domains/composition-engine.md` — composition context
+- `.platform/work/gemini-suno-prompt-v1.md` — active blocked stream
+- `.platform/architecture.md` — current system architecture
+- `.platform/conventions/git-flow.md` — branch/release flow
+- `.platform/domains/audio-analysis.md` — stem/MIDI limitations
+- `.platform/domains/local-orchestration.md` — backend flow
+- `.platform/domains/juce-plugin.md` — AU/VST/JUCE boundaries
 - `.platform/domains/llm-midi-generation.md` — Gemini/SUNO follow-up
-- `.platform/domains/juce-plugin.md` — plugin/exporter boundaries
-- `.platform/memory/log.md` — chronological cleanup log
 
 **Do not load:** archived streams unless needed for historical rationale.
 **Never load:** `work/archive/*`
-
-## Key Files
-
-- `analysis/`
-- `backend/`
-- `scripts/`
-- `Source/`

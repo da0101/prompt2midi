@@ -1,70 +1,46 @@
 # prompt2midi — Current Status
 
-Last updated: 2026-04-28
+Last updated: 2026-05-06
 
-prompt2midi is a local-first AI co-producer for Ableton Live. The current repo is a JUCE audio plugin shell; `promt.md` is the product and execution source of truth for building the full system: JUCE plugin, Node orchestrator, Python analysis engine, and local LLM interpretation/prompt generation.
+prompt2midi is an open-source, local-first AI co-producer for producers and artists. It can be used as a DAW inspiration starter for Ableton/Logic/other DAWs, or as a pre-SUNO tool for turning a reference-inspired idea into a cleaner prompt, structure guide, MIDI package, and optional proxy material.
 
----
+`develop` is the default branch for daily work. `main` is release-only and should receive merges from `develop` when creating version tags.
 
-## Feature areas
+## Feature Areas
 
 | Area | Status | Last touched | Notes |
 |---|---|---|---|
-| JUCE plugin shell | 🔵 Exists | 2026-04-28 | Editor now has file choose/drop, prompt input, async local API polling, result display, and copy prompt. JUCE is installed at `/Applications/JUCE`; Projucer regenerated the Xcode project and Debug builds pass. |
-| Audio track ingestion | 🔵 Exists | 2026-04-28 | Plugin accepts WAV/WAVE/MP3 paths; backend decodes MP3 locally with FFmpeg before Python WAV analysis. |
-| Python analysis engine | 🔵 Exists | 2026-04-28 | Dependency-free PCM WAV analyzer returns BPM/key estimates with confidence, energy curve, loudness, spectral basics, warnings, and optional Basic Pitch model transcription when installed. |
-| Node orchestrator | 🔵 Exists | 2026-04-28 | Local stdlib Node API has `/analyze`, `/status`, `/result`, job state, Python bridge, and prompt package generation. |
-| MIDI extraction/export | 🔵 Exists | 2026-04-28 | Python writes `reference-sketch.mid`, optional Basic Pitch `model-transcription.mid` / `model-bass-transcription.mid`, and legacy heuristic `bass-transcription.mid`. Full source separation, melody cleanup, and chord extraction remain pending. |
-| Local LLM interpretation | 🔵 Exists | 2026-04-28 | Deterministic local prompt generator turns structured analysis into producer summary and AI music prompt. Real local model runtime remains deferred. |
-| Ableton UX | 🔵 Exists | 2026-04-28 | Functional MVP UI exists and builds as standalone/AU/VST3. It is accepted as temporary; full UI polish and in-host Ableton verification remain follow-ups. |
+| JUCE plugin client | 🔵 Exists | 2026-05-06 | WAV/MP3 selection, prompt entry, job polling, result display, copy prompt. Full AU/VST integration and host QA are next production work. |
+| Local Node backend | 🔵 Exists | 2026-05-06 | Localhost API with `/health`, `/analyze`, `/status`, `/result`, job state, MP3 decode, Python bridge, aggregation. |
+| Python analysis engine | 🔵 Exists | 2026-05-06 | Structured BPM/key/energy/loudness/spectral/genre/chord/drum/structure outputs. Optional engines improve results but must fail soft. |
+| Stem splitting / MIDI mapping | ⚠ Flagged | 2026-05-06 | Useful evidence path, but still weak. Needs better source-aware cleanup, note ownership, quantization, register selection, and confidence labeling. |
+| Composition package | 🔵 Exists | 2026-05-06 | Generates original bass/drums/chords/melody/full_loop MIDI, summary, and prompt package. |
+| Full Arrangement / proxy flow | 🔵 Exists | 2026-05-06 | Arrangement Lock, structure maps, guide MIDI, SUNO proxy package, optional ACE/local audio candidates. |
+| Gemini SUNO prompt | ⚠ Blocked | 2026-05-06 | Code exists, but real `GEMINI_API_KEY` + WAV smoke test is still required before closure. |
+| Branch/release flow | ✓ Done | 2026-05-06 | GitHub default branch is `develop`; `main` is release-only; CODEOWNERS assigns all changes to `@da0101`. |
 
-**Legend:**
-- ✓ Done — shipped, tested, merged
-- 🔵 Exists — in place but may need review
-- ⧗ Pending — planned, not started
-- ⚠ Flagged — known issue that needs attention
-- 🔴 Deferred — decided to punt (reference `decisions.md` entry)
+**Legend:** ✓ Done, 🔵 Exists, ⚠ Flagged/blocked, ⧗ Pending, 🔴 Deferred.
 
-## Immediate priorities
+## Immediate Priorities
 
-1. **Continue source-aware-transcription-v1** — Basic Pitch model MIDI is integrated; next accuracy step is stem-aware bass/chord/melody cleanup.
-2. **Validate real references** — compare `model-transcription.mid`, `model-bass-transcription.mid`, and heuristic output by ear in Ableton.
-3. **Choose local LLM runtime** — deterministic prompt generation still needs replacement with the selected local model path.
+1. **Release v1.0.0 baseline** — merge `develop` to `main` and tag once docs/platform refresh is committed.
+2. **Improve stem/MIDI quality** — source-aware mapping, cleanup, quantization, register choice, confidence labels.
+3. **Complete JUCE AU/VST integration** — reliable plugin build/install, Ableton host QA, import/export ergonomics.
+4. **Unblock Gemini SUNO prompt stream** — run a real-key smoke test and verify `exports/prompt.txt` is Gemini-generated.
 
-## Open decisions
+## Release Blocklist
 
-| # | Question | Deadline |
-|---|---|---|
-| 1 | Which local LLM runtime/model is the first supported target? | Before Phase 5 implementation |
-| 2 | Should Node/Python live inside this repo or be split into sibling repos later? | Before backend grows beyond MVP |
-| 3 | What exact Ableton plugin format is release-critical first: AU, VST3, or standalone? | Before release packaging |
+- [x] Branch flow documented and `develop` set as default.
+- [x] CODEOWNERS added for owner review.
+- [x] Local backend and Python analysis path exist.
+- [x] README/platform docs describe current architecture.
+- [ ] Full AU/VST/JUCE workflow verified in a real DAW host.
+- [ ] Stem/MIDI evidence improved beyond weak MVP mapping.
+- [ ] Real Gemini SUNO prompt smoke test completed or explicitly deferred.
 
-## Release blocklist
+## Known Gotchas
 
-Things that must be resolved before this project ships / goes live:
-
-- [x] JUCE generated support files restored so Xcode builds.
-- [ ] JUCE plugin can run in Ableton without blocking the audio thread.
-- [x] Local backend startup, health check, job status, and failure states are handled from the plugin/backend contract.
-- [x] Phase 1 analysis has repeatable accuracy checks for BPM/key on fixture tracks.
-- [ ] No secrets, cloud-only assumptions, or raw user audio uploads are required for core use.
-
-## Known gotchas (pinned)
-
-Things that will bite every new session if not flagged upfront.
-
-- **`promt.md` is the execution plan** — do not treat the current JUCE starter code as the full intended scope.
-- **The processor is intentionally pass-through** — the MVP integration lives in the editor/backend path and does not process audio in `processBlock`.
-- **Local-first is a hard product constraint** — design backend and LLM integrations so the main workflow works without cloud APIs.
-- **Audio-thread safety matters** — never do network/process/file-heavy work in `processBlock`.
-- **JUCE build depends on local generated files** — `JuceLibraryCode/` is generated locally by Projucer and ignored by git, so rerun Projucer if a clean checkout cannot build.
-
-## File size violations
-
-> Global rule: max ~300 lines per file. Track known offenders here so they get split before being added to.
-
-- _None yet_
-
----
-
-For focused context, start with `.platform/work/BRIEF.md` and the domain files under `.platform/domains/`.
+- Stem splitting and MIDI mapping are not production-grade yet; treat extracted MIDI as editable evidence.
+- JUCE must remain the client/UI layer; do not put long-running work in `processBlock`.
+- Optional cloud/model engines must not be required for the core workflow.
+- `develop` is the default branch for feature work; `main` is for releases and tags.

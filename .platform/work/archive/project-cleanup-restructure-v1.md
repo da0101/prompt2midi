@@ -2,15 +2,15 @@
 stream_id: stream-project-cleanup-restructure-v1
 slug: project-cleanup-restructure-v1
 type: chore
-status: in-progress
+status: archived
 agent_owner: codex
 domain_slugs: [audio-analysis, composition-engine, local-orchestration, llm-midi-generation, juce-plugin]
 repo_ids: [repo-primary]
-base_branch: main
-git_branch: feature/project-cleanup-restructure-v1
+base_branch: develop
+git_branch: develop
 created_at: 2026-05-05
-updated_at: 2026-05-05
-closure_approved: false
+updated_at: 2026-05-06
+closure_approved: true
 ---
 
 # project-cleanup-restructure-v1
@@ -43,10 +43,10 @@ _Append-only. Format: `2026-05-05 — <decision> — <rationale>`_
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-05-05 by danilulmashev
-- **What just happened:** final stream audit passed: ab doctor clean, staged and unstaged diff checks clean, stale moved-path sweep clean, brief back under 60 lines
+- **Last updated:** 2026-05-06 by codex
+- **What just happened:** cleanup stream was committed, merged through PR #1, branch deleted, and archived during platform documentation refresh
 - **Current focus:** —
-- **Next action:** stage all cleanup changes with git add -A, commit the project-cleanup-restructure-v1 stream, then continue with Gemini smoke testing
+- **Next action:** none; stream closed
 - **Blockers:** none
 
 ## Progress log

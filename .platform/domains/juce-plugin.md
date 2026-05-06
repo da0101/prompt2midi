@@ -5,7 +5,7 @@ status: active
 repo_ids: [prompt2midi]
 related_domain_slugs: [local-orchestration, audio-analysis, llm-midi-generation]
 created_at: 2026-04-28
-updated_at: 2026-05-05
+updated_at: 2026-05-06
 ---
 
 # juce-plugin
@@ -23,6 +23,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - `LocalApiClient.h` summarizes Full Arrangement / Arrangement Lock status, confidence, review summary, and paths for `arrangement-map.json`, `arrangement-lock-report.json`, `structure-debug.json`, `analysis-report.md`, `suno-structure-prompt.md`, and `full-arrangement-guide.mid`.
 - The plugin should call a local API for long-running work rather than doing analysis inside the plugin.
 - Keep host/audio-thread stability as the primary invariant.
+- Full AU/VST workflow integration is still upcoming production work: install/build reliability, in-host Ableton verification, import/export ergonomics, and polished MIDI/prompt handoff need dedicated follow-up.
 
 ## Frontend / clients
 
@@ -38,6 +39,7 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - Plugin must treat low-confidence Arrangement Lock maps as review-needed before full ACE rendering.
 - Plugin output copy must not imply full transcription accuracy unless the backend exposes a source-aware extraction result.
 - Do not require cloud credentials in the plugin for the core path.
+- Plugin UI must clearly label weak stem/MIDI extraction outputs as review-needed/editable evidence.
 
 ## Key files
 
@@ -56,3 +58,4 @@ This domain covers the Ableton-facing plugin: file/prompt input, progress displa
 - Do not perform heavy analysis, subprocess work, HTTP blocking, or file-heavy processing in `processBlock`.
 - Start macOS/Ableton-first, using the existing JUCE/Xcode exporter.
 - Keep UI controls mapped to producer workflows: analyze, copy prompt, export MIDI, re-analyze.
+- Next JUCE work is full AU/VST integration and production-grade host QA, not more backend logic inside JUCE.

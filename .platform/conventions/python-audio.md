@@ -1,10 +1,10 @@
 # Python Audio Conventions
 
-Last updated: 2026-04-28
+Last updated: 2026-05-06
 
 ## Scope
 
-Applies once the Python analysis engine is introduced.
+Applies to the implemented Python analysis, MIDI, composition, arrangement, and generation packages.
 
 ## Rules
 
@@ -14,6 +14,8 @@ Applies once the Python analysis engine is introduced.
 - Make outputs deterministic enough for tests and LLM prompts.
 - Include confidence or caveat fields when detection is uncertain.
 - Keep command-line/module interfaces stable so Node can call them reliably.
+- Treat stem splitting and MIDI mapping as imperfect evidence. Include method/confidence/limitations for every extracted MIDI path.
+- Optional ML engines must fail soft with warnings so the dependency-free path still works.
 
 ## Phase order
 
@@ -21,3 +23,4 @@ Applies once the Python analysis engine is introduced.
 2. Section segmentation and transition/energy analysis.
 3. Stem/instrument analysis.
 4. Chords, melody/bass extraction, MIDI export.
+5. Next production push: stronger source-aware stem cleanup, MIDI ownership mapping, quantization, register selection, and DAW-ready labels.

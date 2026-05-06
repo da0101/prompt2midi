@@ -1,6 +1,6 @@
 # Security / Privacy Conventions
 
-Last updated: 2026-04-28
+Last updated: 2026-05-06
 
 ## Scope
 
@@ -15,6 +15,8 @@ Applies to local file handling, backend APIs, model integrations, prompts, logs,
 - Validate local file paths before analysis; avoid accepting arbitrary remote URLs in the MVP.
 - Bind the local API to localhost by default.
 - If optional cloud LLM support is added later, require explicit opt-in and environment-based secrets.
+- Optional Gemini prompt generation is cloud-backed and must remain opt-in via environment key. Core analysis/composition cannot depend on it.
+- Do not log full local audio paths or prompt contents in persistent logs unless explicitly needed for debugging.
 
 ## Threats to keep in mind
 

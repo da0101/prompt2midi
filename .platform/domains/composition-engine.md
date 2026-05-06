@@ -2,10 +2,10 @@
 domain_id: dom-composition-engine
 slug: composition-engine
 status: active
-repo_ids: [repo-primary]
+repo_ids: [prompt2midi]
 related_domain_slugs: [audio-analysis, llm-midi-generation, local-orchestration, juce-plugin]
 created_at: 2026-04-28
-updated_at: 2026-04-28
+updated_at: 2026-05-06
 ---
 
 # composition-engine
@@ -43,6 +43,7 @@ Owns the deterministic composition layer: takes analysis facts and evidence and 
 
 - Composition engine is deterministic and dependency-free (stdlib only); no ML deps in this layer
 - Generated MIDI = product; extracted MIDI = evidence only; do not expose raw transcription as final output
-- SUNO prompt is a stub until Phase 4 (Gemini integration)
+- Local SUNO prompt text is always available; optional Gemini SUNO prompt generation exists but still needs real-key smoke verification.
 - 32-bar loop is the default; bars parameter is configurable
 - Multi-track full_loop.mid uses MIDI format type 1 (multiple MTrk chunks)
+- Composition MIDI is product output, but stem-derived/transcribed MIDI remains evidence and should not be conflated with generated arrangement tracks.
