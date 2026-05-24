@@ -23,6 +23,7 @@ This domain covers the local Node.js backend that connects the JUCE plugin, Pyth
 - Node owns job queue/state, MP3/WAV boundary validation, FFmpeg MP3 decoding, Python process invocation, deterministic prompt generation, and result aggregation.
 - Node passes through `midi_files` and structured `midi_assets` from Python, including generated sketches, optional Basic Pitch model transcription, optional Demucs stem-aware bass transcription, and heuristic fallbacks.
 - Development scripts include `npm run dev:refresh`, `npm run web:dev`, pipeline runners under `scripts/pipelines/*`, setup scripts under `scripts/setup/*`, and packaging helpers under `scripts/packaging/*`.
+- `scripts/pipelines/run-suno-proxy-pipeline.js --map-stems` runs the ACE-output stem/MIDI mapping contract on the selected generated proxy audio and writes `ace-stem-midi-map/ace-stem-midi-map.json`; it is explicit because stem separation can be slow.
 - WebSocket or streaming progress remains deferred; MVP uses polling.
 - Keep orchestration separate from signal processing.
 

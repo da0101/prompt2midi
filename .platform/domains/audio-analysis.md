@@ -22,10 +22,13 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - Beat/downbeat evidence is compared across optional All-In-One output, the local librosa fallback in `analysis/core/beat_grid.py`, structure-provided downbeats, and estimated BPM bars. `structure-debug.json` includes `bar_grid_candidates` so mismatches are auditable.
 - Phase 2 output: BPM/key estimates with confidence, energy curve, loudness, spectral features, warnings, a `reference-sketch.mid` path, optional Basic Pitch model MIDI, optional Demucs stem-aware bass MIDI, and optional experimental `bass-transcription.mid`.
 - Python still analyzes PCM WAV; MP3 is decoded by Node/FFmpeg before invoking Python.
-- Current weak area: stem splitting and MIDI mapping are useful evidence, but not yet production-grade. Demucs-style stems can bleed, full-mix transcription can overgenerate, and bass/drum/chord/melody ownership still needs stronger cleanup.
-- Next phases: improve stem/instrument separation, source-aware MIDI mapping, quantization, note filtering, register selection, and DAW-ready confidence labels.
+- Current weak area: stem splitting and MIDI mapping are useful evidence, but not yet production-grade. Phase 1 now writes an ACE-output role map, but Demucs-style stems can still bleed, full-mix transcription can overgenerate, and bass/drum/chord/melody ownership still needs stronger cleanup.
+- Next phases: add stem repair/recombination QA, source-aware MIDI mapping, quantization, note filtering, register selection, and DAW-ready confidence labels.
 - For `stems-splitting-midi-mapping`, reusable stems and MIDI must come from ACE-generated output, not the original reference track.
 - Stem roles must be detected dynamically from audio content. A track with only drums+pads should not emit bass/guitar MIDI; a track with only bass+guitar should not emit drums/pads MIDI.
+- `analysis/midi/ace_stem_mapping.py` is the first ACE-output contract: it preserves only active generated-audio stem roles, records omitted roles, and writes planned/context-only MIDI targets without creating fake MIDI.
+- House bass mapping must not depend only on generic polyphonic transcription. Bouncy sub bass needs a dedicated lane: low-frequency onset/envelope tracking, monophonic F0 estimation, optional Basic Pitch cross-check, key/register constraints, beat-grid quantization, and house-groove interpretation of 4-to-the-floor, offbeats, syncopation, rests, and sidechain gaps.
+- House stabs need a separate transient harmonic lane over `other/guitar/piano` stems: detect short chord/stab onsets, estimate chord/register when confidence allows, and otherwise export rhythm/stab placeholders with limitations rather than invented voicings.
 - Demucs stem separation is an optional isolated engine in `.venv-stems`; dependency-free analysis and Basic Pitch full-mix analysis must still work when it is absent.
 - Drum-stem analysis computes onset rates per bar for kick, mid percussion, and high percussion. Long-track drum density must not be normalized by unique 16th-grid positions over the whole song; dense mid/high onset rates are promoted as `percussion_character: tribal_percussion` so ACE/SUNO prompts preserve conga/bongo/shaker-style movement.
 - All-In-One-Fix can run in an optional Docker worker for the fragile NATTEN/torch structure model path. Enable it with `PROMPT2MIDI_ENABLE_ALLIN1_DOCKER=1` or `--allin1-docker`; it is bounded by `PROMPT2MIDI_ALLIN1_DOCKER_TIMEOUT_SECONDS` (default 300s) and falls back to the internal librosa/heuristic arrangement analyzer on timeout or failure.
@@ -62,6 +65,7 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - `analysis/core/feature_extraction.py`
 - `analysis/midi/midi_extraction.py`
 - `analysis/midi/source_transcription.py`
+- `analysis/midi/ace_stem_mapping.py`
 - `analysis/arrangement/arrangement_lock.py`
 - `analysis/arrangement/arrangement_lock_reports.py`
 - `analysis/arrangement/arrangement_reports.py`

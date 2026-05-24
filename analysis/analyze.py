@@ -145,7 +145,7 @@ def run(
                 "label": "Stem-aware drum groove MIDI",
                 "kind": "source_aware_transcription",
                 "is_transcription": True,
-                "source_method": f"{stems.get('method', 'stem_separation')}+onset_detection",
+                "source_method": f"{stems.get('method', 'stem_separation')}+{analysis['drums'].get('method', 'onset_detection')}",
                 "confidence": 0.7,
                 "note_count": len(drum_events),
                 "limitations": [
@@ -508,14 +508,16 @@ def _number_or_none(value) -> float | None:
 def _reference_sample_duration(analysis: dict) -> float:
     configured = str(os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION") or "").strip().lower()
     source_duration = max(1.0, _number_or_none((analysis or {}).get("duration_seconds")) or 30.0)
+    max_duration = _number_or_none(os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"))
+    cap = max(10.0, max_duration) if max_duration else source_duration
     if configured in {"", "sample", "loop", "30", "30s"}:
-        return 30.0
+        return min(30.0, cap)
     if configured in {"full", "reference", "track", "source"}:
-        return source_duration
+        return min(source_duration, cap)
     try:
-        return max(10.0, min(source_duration, float(configured.rstrip("s"))))
+        return max(10.0, min(source_duration, cap, float(configured.rstrip("s"))))
     except ValueError:
-        return 30.0
+        return min(30.0, cap)
 
 
 def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict]) -> dict:
@@ -527,9 +529,14 @@ def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict])
     for asset in midi_assets:
         key = asset["key"]
         export_name = _export_name(key, has_source_bass)
-        if export_name is None:
+        block_reason = _midi_export_block_reason(asset)
+        if export_name is None or block_reason:
             asset["is_recommended_output"] = False
             asset["debug_path"] = asset["path"]
+            if block_reason:
+                asset["review_required"] = True
+                asset.setdefault("warnings", []).append(block_reason)
+                asset.setdefault("limitations", []).append(block_reason)
             continue
 
         exported_path = os.path.abspath(os.path.join(exports_dir, export_name))
@@ -542,6 +549,24 @@ def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict])
         midi_files[key] = exported_path
 
     return export_files
+
+
+def _midi_export_block_reason(asset: dict) -> str | None:
+    key = asset.get("key")
+    confidence = float(asset.get("confidence") or 0.0)
+    note_count = int(asset.get("note_count") or 0)
+    source_method = str(asset.get("source_method") or "")
+    if key == "model_transcription":
+        return "Full-mix model transcription is debug-only until a MIDI quality report validates timing, density, register, and key fit."
+    if key == "model_bass_transcription":
+        return "Full-mix filtered bass MIDI is debug-only because it is not separated from drums, stabs, vocals, or low percussion."
+    if key == "source_bass_transcription" and confidence < 0.68:
+        return "Stem-aware bass MIDI did not pass the recommendation gate; keep as debug output until house-aware bass cleanup validates timing, register, and key fit."
+    if key == "source_drum_groove" and "fallback" in source_method:
+        return "Stem-aware drum MIDI used the dependency-free fallback and is for debugging only; install/run the stronger onset analyzer or house-aware drum mapper before recommending it."
+    if key == "source_drum_groove" and note_count > 64:
+        return "Stem-aware drum MIDI is too dense for a two-bar groove export and needs cleanup before recommendation."
+    return None
 
 
 def _export_name(key: str, has_source_bass: bool) -> str | None:

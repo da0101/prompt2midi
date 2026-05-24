@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import time
 import uuid
@@ -65,7 +66,13 @@ def generate_with_ace_step(
         f"effective_similarity={payload.get('reference_similarity')}"
     )
     _progress("ace-step: submitting reference-conditioned generation task")
-    task_id = _submit_task(base_url, payload)
+    try:
+        task_id = _submit_task(base_url, payload)
+    except (TimeoutError, socket.timeout) as exc:
+        raise TimeoutError(
+            "Local generator timed out while accepting the generation request before a task id was returned. "
+            "Try lower source guidance, restart the local generator, or increase PROMPT2MIDI_ACE_STEP_SUBMIT_TIMEOUT."
+        ) from exc
     results = _poll_task(base_url, task_id)
     candidates_payload = _download_candidates(base_url, results, output_dir, duration_seconds, analysis or {})
     if not candidates_payload:
@@ -183,7 +190,12 @@ def _build_payload(
     vocal = _vocal_transform(transform, analysis)
     direct_vocal = _uses_direct_vocal(vocal)
     instrumental = not direct_vocal
-    reference_audio_path = reference_path if is_cover else None
+    # ACE-Step's own cover UI uploads the source clip as src_audio only.
+    # Sending the same long WAV as both reference_audio and ctx_audio makes
+    # /release_task much heavier and can time out before it returns a task id.
+    reference_audio_path = None
+    if is_cover and os.environ.get("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE") == "1":
+        reference_audio_path = reference_path
     seed_value = int(os.environ.get("PROMPT2MIDI_ACE_STEP_SEED") or "-1")
     return {
         "task_type": task_type,
@@ -695,7 +707,7 @@ def _submit_task(base_url: str, payload: dict) -> str:
     reference_path = payload.pop("reference_audio_path", None)
     src_path = payload.pop("src_audio_path", None)
     files = {}
-    if reference_path:
+    if reference_path and os.path.abspath(reference_path) != os.path.abspath(src_path or ""):
         files["reference_audio"] = reference_path
     if src_path:
         files["ctx_audio"] = src_path
