@@ -199,6 +199,7 @@ function buildGenerationArgs({ generationReference, runDir, level, effectiveProm
   ];
   if (args.vocals) generationArgs.push('--vocals');
   if (args.instrumental) generationArgs.push('--instrumental');
+  if (args.referenceConditioningDuration) generationArgs.push('--reference-conditioning-duration', args.referenceConditioningDuration);
   if (args.referenceStart) generationArgs.push('--reference-start', args.referenceStart);
   if (args.referenceStrategy) generationArgs.push('--reference-strategy', args.referenceStrategy);
   if (packCandidate > 0) generationArgs.push('--select-candidate', String(packCandidate));
@@ -377,6 +378,7 @@ async function buildGeminiBrief({ generationReference, runDir, prompt, level, du
   ];
   if (args.vocals) preflightArgs.push('--vocals');
   if (args.instrumental) preflightArgs.push('--instrumental');
+  if (args.referenceConditioningDuration) preflightArgs.push('--reference-conditioning-duration', args.referenceConditioningDuration);
   if (args.referenceStart) preflightArgs.push('--reference-start', args.referenceStart);
   if (args.referenceStrategy) preflightArgs.push('--reference-strategy', args.referenceStrategy);
 
@@ -621,6 +623,8 @@ Options:
   --prompt <text>               Copyright-safe style direction.
   --similarity-level <level>    Defaults to medium-high for close but copyright-safer proxy demos.
   --duration <seconds|full>     Defaults to 30; use full for one continuous reference-length render/package.
+  --reference-conditioning-duration <seconds>
+                               Use a shorter source-conditioning window while keeping --duration as the generated output length.
   --extend-full-track           With --duration full, extend the coherent seed toward the source duration using continuation chunks.
   --full-track-strategy <name>  auto, one-shot, or continuation. Auto tries one-shot first, then falls back.
   --candidates <n>              Defaults to 4.

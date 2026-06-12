@@ -107,6 +107,9 @@ def separate_for_transcription(audio_path: str, output_dir: str, source_stage: s
         }
 
     _progress(f"stem separation: produced stems {', '.join(sorted(stems))}")
+    if os.environ.get("PROMPT2MIDI_KEEP_DEMUCS_RAW") != "1":
+        shutil.rmtree(demucs_root, ignore_errors=True)
+        shutil.rmtree(output_path / "demucs-runtime", ignore_errors=True)
     return {
         "available": True,
         "method": _method_name(model),

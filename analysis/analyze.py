@@ -243,6 +243,7 @@ def run(
             prompt=user_prompt or (suno_prompt or {}).get("text") or "",
             analysis=analysis,
             duration_seconds=sample_duration,
+            reference_conditioning_duration_seconds=_reference_conditioning_duration(analysis, sample_duration),
         )
 
     analysis["bass_transcription"] = {
@@ -325,6 +326,7 @@ def _run_fast_sample_lane(
         prompt=user_prompt,
         analysis=analysis,
         duration_seconds=sample_duration,
+        reference_conditioning_duration_seconds=_reference_conditioning_duration(analysis, sample_duration),
     )
     analysis_path = os.path.join(exports_dir, "fast-analysis.json")
     with open(analysis_path, "w", encoding="utf-8") as handle:
@@ -518,6 +520,17 @@ def _reference_sample_duration(analysis: dict) -> float:
         return max(10.0, min(source_duration, cap, float(configured.rstrip("s"))))
     except ValueError:
         return min(30.0, cap)
+
+
+def _reference_conditioning_duration(analysis: dict, output_duration_seconds: float) -> float:
+    configured = str(os.environ.get("PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION") or "").strip().lower()
+    if not configured:
+        return output_duration_seconds
+    source_duration = max(1.0, _number_or_none((analysis or {}).get("duration_seconds")) or output_duration_seconds)
+    try:
+        return max(10.0, min(source_duration, float(configured.rstrip("s"))))
+    except ValueError:
+        return output_duration_seconds
 
 
 def _promote_exports(output_dir: str, midi_files: dict, midi_assets: list[dict]) -> dict:

@@ -7,7 +7,13 @@ import unittest
 import wave
 from unittest import mock
 
-from analysis.analyze import _promote_exports, _prompt_vocal_hint, _reference_sample_duration, run as run_analysis
+from analysis.analyze import (
+    _promote_exports,
+    _prompt_vocal_hint,
+    _reference_conditioning_duration,
+    _reference_sample_duration,
+    run as run_analysis,
+)
 from analysis.arrangement.full_arrangement import build_arrangement_map, build_full_arrangement_package
 from analysis.core.beat_grid import analyze_beat_grid
 from analysis.core.external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
@@ -1096,6 +1102,39 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("dense tribal percussion", caption)
         self.assertIn("not sparse generic hats", caption)
 
+    def test_transpose_prompt_overrides_reference_key_harmonic_guard(self):
+        prompt = (
+            "keep the same underground house ambience, but transpose all musical material "
+            "up exactly 2 semitones from G# minor to A# minor. Bassline must use A# minor notes."
+        )
+        analysis = {
+            "bpm": 126.0,
+            "key": "G# minor",
+            "genre": {"primary": "house", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+            "vocals": {"present": False},
+        }
+        analysis["reference_transform"] = build_reference_transform(prompt, analysis)
+
+        conditioned = _condition_prompt(prompt, {}, analysis["reference_transform"])
+        caption = _caption(prompt, analysis)
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt=conditioned,
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertIn("tuned inside A# minor", conditioned)
+        self.assertIn("target key area A# minor", conditioned)
+        self.assertNotIn("tuned inside G# minor", conditioned)
+        self.assertIn("tuned inside A# minor", caption)
+        self.assertIn("requested target key area: A# minor", caption)
+        self.assertNotIn("tuned inside G# minor", caption)
+        self.assertEqual(payload["key_scale"], "A# Minor")
+        self.assertEqual(payload["keyscale"], "A# Minor")
+
     def test_detected_tribal_percussion_raises_ace_source_hold(self):
         transform = build_reference_transform(
             "",
@@ -1741,6 +1780,18 @@ class FeatureExtractionTest(unittest.TestCase):
                 os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION", None)
             else:
                 os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"] = previous_max
+
+    def test_reference_conditioning_duration_can_be_shorter_than_output(self):
+        previous = os.environ.get("PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION")
+        try:
+            os.environ["PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION"] = "120"
+            self.assertEqual(_reference_conditioning_duration({"duration_seconds": 466.0}, 280.0), 120.0)
+            self.assertEqual(_reference_conditioning_duration({"duration_seconds": 89.0}, 280.0), 89.0)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION"] = previous
 
     def test_low_similarity_candidate_selection_prefers_originality(self):
         close_copy = _selection_score(quality_score=0.82, exact_similarity_score=0.72, target_similarity=0.2)

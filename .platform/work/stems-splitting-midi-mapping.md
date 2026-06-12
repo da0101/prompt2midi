@@ -9,7 +9,7 @@ repo_ids: [prompt2midi]
 base_branch: develop
 git_branch: feature/stems-splitting-midi-mapping
 created_at: 2026-05-06
-updated_at: 2026-05-24
+updated_at: 2026-05-29
 closure_approved: false
 ---
 
@@ -71,32 +71,35 @@ _Append-only. Format: `YYYY-MM-DD — <decision> — <rationale>`_
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-05-24 by danilulmashev
-- **What just happened:** debugged full-track auto fallback failure; found Dikka continuation seed failed at 0.56/0.30 while prior successful run used 0.56/0.20; capped UI and fallback continuation source controls to 0.56/0.20
+- **Last updated:** 2026-05-29 by danilulmashev
+- **What just happened:** Regenerated Per Hammar candidate 3 and Dikka candidate 4 final packages with corrected drum packaging. Main arranged-stems keep Suno drums.wav; percussion-reference-stems contain arranged kick/snare/hihats/cymbals/toms guides from the existing better split folders. Added --percussion-reference-input-dir and tests.
 - **Current focus:** —
-- **Next action:** restart web UI/API and rerun Dikka full-track; verify fallback logs lowered controls and produces a 120s seed before full-track extension
+- **Next action:** Audition the Desktop final-package-v2 folders in Ableton; use feedback to refine second-half/outro math without changing the drum export contract.
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `YYYY-MM-DD HH:MM — <what happened>`._
 
-2026-05-24 16:40 — debugged full-track auto fallback failure; found Dikka continuation seed failed at 0.56/0.30 while prior successful run used 0.56/0.20; capped UI and fallback continuation source controls to 0.56/0.20
+2026-05-29 19:03 — Regenerated Per Hammar candidate 3 and Dikka candidate 4 final packages with corrected drum packaging. Main arranged-stems keep Suno drums.wav; percussion-reference-stems contain arranged kick/snare/hihats/cymbals/toms guides from the existing better split folders. Added --percussion-reference-input-dir and tests.
 
-2026-05-24 13:24 — debugged ACE UI full-track failure where long references submitted over-limit generation; capped full-source sample duration via PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION and updated UI copy
+2026-05-29 18:55 — Changed continuation arranger drum export contract: main arranged-stems keep original Suno drums.wav; DrumSep kick/snare/hihats/cymbals/toms are rendered through the same arrangement into percussion-reference-stems for Ableton rhythm replacement reference only. Updated tests and generation run log.
 
-2026-05-05 22:56 — fixed ACE candidate packaging so --map-stems builds stem/MIDI assets for every generated candidate; added house-aware bass-stem cleanup that keeps sub notes and writes per-candidate stem-bass.mid
+2026-05-29 12:42 — Fixed outro source rule so outro continues the same repeated post-drop groove slice with bass muted, and rendered Dikka v5
 
-2026-05-05 22:36 — confirmed drum MIDI failure was fallback onset hallucination; changed ambiguous house/electro fallback to conservative 4/4 kick-clap-offbeat-hat pattern and kept it debug-only
+2026-05-29 12:30 — Fixed long second-half post-drop source selection so extended post-drop repeats developed bars 32-96 instead of restarting from intro
 
-2026-05-05 22:20 — ran Yello 30s/2-candidate ACE stem+MIDI QA from 40s start; fixed --map-stems boolean parsing and added dependency-free drum onset fallback so generated ACE output produces stem-drums.mid plus stem-bass.mid
+2026-05-29 12:22 — Rendered Dikka preserve-96 extra32 v3 with a longer 96-bar post-drop section so outro arrives later
 
-2026-05-05 21:33 — researched stem separation and MIDI mapping approach; implemented ACE-output role map, flexible Demucs stem preservation, proxy --map-stems hook, and dynamic role tests
+2026-05-29 08:32 — Rendered Dikka preserve-96 Suno-priority arrangement after feedback that previous pass cut too much accepted Suno development
 
-2026-05-05 21:20 — registered new feature stream for ACE-output stem splitting and dynamic MIDI mapping; branch feature/stems-splitting-midi-mapping created from develop; decisions recorded in stream/domain/memory
+2026-05-28 23:14 — Added reusable second_half_extra_bars arranger control and rendered Dikka Suno-priority long-second-half test
 
-2026-05-06 00:00 — registered stream for ACE-output stem splitting and dynamic MIDI mapping; branch created from `develop`
-2026-05-06 01:10 — Phase 1 implementation added flexible Demucs stem preservation, ACE-output role mapping JSON, proxy-run `--map-stems` hook, and regression tests
-2026-05-06 01:25 — refined Phase 3 around house-aware bouncy sub-bass mapping, 4-to-the-floor interpretation, percussion/stab extraction, and grid/key-constrained MIDI cleanup
+2026-05-28 22:56 — Added generic reference-blueprint continuation mode, preserve_source_start_bars skip control, bar-snapped target rendering, regression tests, and rendered Dikka candidate-4 reference-blueprint v7 with source-audio copies.
+
+2026-05-28 22:20 — Rendered same-format Dikka candidate-4 arrangement test using Suno stems, MDX23C drum substems, 126 BPM bar-locked 200-bar structure, and source-audio copies for Suno/ACE/reference comparison.
+
+2026-05-28 22:00 — Fixed arrangement stem role inference so filename roles override parent folder names, rerendered v8 with exported kick/snare/hihats/toms/cymbals plus bass/synths/fx, and documented the accepted arrangement/percussion export rule.
+
 ## Open questions
 _Things blocked on user input. Remove when resolved._
 

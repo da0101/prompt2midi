@@ -1,10 +1,12 @@
 # prompt2midi — Current Status
 
-Last updated: 2026-05-06
+Last updated: 2026-05-25
 
 prompt2midi is an open-source, local-first AI co-producer for producers and artists. It can be used as a DAW inspiration starter for Ableton/Logic/other DAWs, or as a pre-SUNO tool for turning a reference-inspired idea into a cleaner prompt, structure guide, MIDI package, and optional proxy material.
 
 `develop` is the default branch for daily work. `main` is release-only and should receive merges from `develop` when creating version tags.
+
+Product north star: see `.platform/product-vision.md` for the current reference-track-to-full-demo-to-stems/MIDI/Suno package vision. Generation experiments and reproducible settings are tracked in `.platform/memory/generation-run-log.md`. Music generation taste rules live in `.platform/conventions/music-generation-style.md` and should be followed by all LLM providers.
 
 ## Feature Areas
 
@@ -41,6 +43,7 @@ prompt2midi is an open-source, local-first AI co-producer for producers and arti
 ## Known Gotchas
 
 - Stem splitting and MIDI mapping are not production-grade yet; treat extracted MIDI as editable evidence.
+- Music generation defaults are not generic electronic music. Keep prompts/settings inside underground house, minimal/deep tech-house, and underground techno-adjacent lanes; avoid EDM/trance/big-room/dubstep/festival language unless the owner explicitly asks.
 - JUCE must remain the client/UI layer; do not put long-running work in `processBlock`.
 - Optional cloud/model engines must not be required for the core workflow.
 - `develop` is the default branch for feature work; `main` is for releases and tags.

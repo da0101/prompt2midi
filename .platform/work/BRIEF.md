@@ -33,6 +33,7 @@ The current stem/MIDI path is useful evidence but weak. For production use, the 
 ## Locked Decisions
 
 - Reference audio is inspiration/evidence only, not the reusable music source.
+- Default music generation taste is underground house/minimal-deep tech-house, not generic electronic/EDM. Follow `.platform/conventions/music-generation-style.md`.
 - Do not claim perfect transcription; label uncertainty.
 - Optional AI/listening models must be local-first where possible and fail soft.
 - JUCE remains client/UI; Python/Node own analysis and mapping.
@@ -44,6 +45,7 @@ The current stem/MIDI path is useful evidence but weak. For production use, the 
 - `.platform/domains/audio-analysis.md` — stem/MIDI limitations and contracts
 - `.platform/domains/local-orchestration.md` — Node job/result contracts
 - `.platform/domains/composition-engine.md` — generated MIDI vs evidence distinction
+- `.platform/conventions/music-generation-style.md` — strict ACE/Suno prompt and genre/taste rules
 - `.platform/domains/juce-plugin.md` — UI/client display constraints
 - `analysis/midi/`, `analysis/generation/`, `analysis/arrangement/`, `analysis/reference/`
 

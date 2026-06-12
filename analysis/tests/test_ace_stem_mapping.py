@@ -121,6 +121,8 @@ class AceStemMappingTest(unittest.TestCase):
                     os.path.join(tmp, "out"),
                     source_stage="ace_generated_output",
                 )
+                self.assertFalse(os.path.exists(os.path.join(tmp, "out", "demucs")))
+                self.assertTrue(os.path.exists(os.path.join(tmp, "out", "stems", "drums.wav")))
 
         self.assertTrue(result["available"])
         self.assertEqual(sorted(result["stems"]), ["drums", "other"])
