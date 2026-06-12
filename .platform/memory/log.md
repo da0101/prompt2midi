@@ -5,6 +5,7 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-06-12 — commit `01c03bc`: Record arrangement workflow checkpoint — auto-logged
 - 2026-06-12 — commit `b3afa2b`: Add underground house arrangement workflow — auto-logged
 - 2026-05-24 — commit `3a956ec`: update — auto-logged
 - 2026-05-06 — debug: unusable ACE stem MIDI — fixed root cause: rough Basic Pitch/fallback MIDI was being promoted as recommended without musical quality gates; drum fallback now caps dominant grid positions and all unvalidated transcription MIDI stays debug-only — never package source MIDI as recommended until timing/register/key/density validation exists.
