@@ -47,3 +47,4 @@ Owns the deterministic composition layer: takes analysis facts and evidence and 
 - 32-bar loop is the default; bars parameter is configurable
 - Multi-track full_loop.mid uses MIDI format type 1 (multiple MTrk chunks)
 - Composition MIDI is product output, but stem-derived/transcribed MIDI remains evidence and should not be conflated with generated arrangement tracks.
+- For generated ACE audio, downstream stem/MIDI mapping should detect actual roles and produce reusable MIDI only from that generated material.

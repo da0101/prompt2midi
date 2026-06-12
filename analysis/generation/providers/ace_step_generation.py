@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import time
 import uuid
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from analysis.core.audio_quality import score_audio_candidate
 from analysis.generation.traceability import append_generation_run, generation_trace_record, write_candidate_manifest
+from analysis.reference.key_intent import requested_target_key
 from analysis.reference.reference_groove import score_groove_similarity
 
 
@@ -65,7 +67,13 @@ def generate_with_ace_step(
         f"effective_similarity={payload.get('reference_similarity')}"
     )
     _progress("ace-step: submitting reference-conditioned generation task")
-    task_id = _submit_task(base_url, payload)
+    try:
+        task_id = _submit_task(base_url, payload)
+    except (TimeoutError, socket.timeout) as exc:
+        raise TimeoutError(
+            "Local generator timed out while accepting the generation request before a task id was returned. "
+            "Try lower source guidance, restart the local generator, or increase PROMPT2MIDI_ACE_STEP_SUBMIT_TIMEOUT."
+        ) from exc
     results = _poll_task(base_url, task_id)
     candidates_payload = _download_candidates(base_url, results, output_dir, duration_seconds, analysis or {})
     if not candidates_payload:
@@ -154,7 +162,8 @@ def _build_payload(
     model: str,
 ) -> dict:
     bpm = _bpm(analysis)
-    key_scale = _key_scale(analysis)
+    target_key = requested_target_key(prompt)
+    key_scale = _key_scale(analysis, target_key=target_key)
     reconstruction_diagnostic = _reconstruction_diagnostic_enabled()
     transform = analysis.get("reference_transform") or {}
     requested_similarity = _groove_similarity(transform)
@@ -183,7 +192,12 @@ def _build_payload(
     vocal = _vocal_transform(transform, analysis)
     direct_vocal = _uses_direct_vocal(vocal)
     instrumental = not direct_vocal
-    reference_audio_path = reference_path if is_cover else None
+    # ACE-Step's own cover UI uploads the source clip as src_audio only.
+    # Sending the same long WAV as both reference_audio and ctx_audio makes
+    # /release_task much heavier and can time out before it returns a task id.
+    reference_audio_path = None
+    if is_cover and os.environ.get("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE") == "1":
+        reference_audio_path = reference_path
     seed_value = int(os.environ.get("PROMPT2MIDI_ACE_STEP_SEED") or "-1")
     return {
         "task_type": task_type,
@@ -277,7 +291,8 @@ def _caption(prompt: str, analysis: dict) -> str:
     groove_text = groove.get("feel") or groove.get("label") or ""
     transform = analysis.get("reference_transform") or {}
     vocal = _vocal_transform(transform, analysis)
-    harmonic = _harmonic_transform(transform, analysis)
+    target_key = requested_target_key(user)
+    harmonic = _harmonic_transform(transform, analysis, target_key=target_key)
     harmonic_guard = _harmonic_guard_text(harmonic)
     character_guard = _reference_character_text(transform)
     style = transform.get("style") or {}
@@ -310,7 +325,9 @@ def _caption(prompt: str, analysis: dict) -> str:
         style_line,
         character_guard,
         harmonic_guard,
-        "same tempo and key area as the reference",
+        f"same tempo as the reference, but use the requested target key area: {target_key}"
+        if target_key
+        else "same tempo and key area as the reference",
         bass_guard,
         "clear bassline groove",
         "tight rhythmic drums",
@@ -426,7 +443,9 @@ def _uses_direct_vocal(vocal: dict) -> bool:
     return bool(vocal.get("preserve_role")) and vocal.get("render_mode") != "instrumental_hook_proxy"
 
 
-def _harmonic_transform(transform: dict, analysis: dict | None = None) -> dict:
+def _harmonic_transform(transform: dict, analysis: dict | None = None, target_key: str | None = None) -> dict:
+    if target_key:
+        return {"key": target_key, "strict_scale": True, "target_key_override": True}
     harmonic = (transform or {}).get("harmonic") or {}
     if isinstance(harmonic, dict) and harmonic:
         return harmonic
@@ -439,6 +458,13 @@ def _harmonic_transform(transform: dict, analysis: dict | None = None) -> dict:
 def _harmonic_guard_text(harmonic: dict) -> str:
     key = harmonic.get("key")
     if harmonic.get("strict_scale") and key and str(key).lower() != "unknown":
+        if harmonic.get("target_key_override"):
+            return (
+                f"global harmonic rule: transpose the musical material and keep bass notes, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
+                "resolved borrowed or chromatic tones are allowed only when they support the requested target key area; "
+                "do not keep the original reference bass roots or chord roots when they conflict with the target key; "
+                "no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, or unresolved atonal artifacts"
+            )
         return (
             f"global harmonic rule: keep bass notes, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
             "resolved borrowed or chromatic tones are allowed only when they fit the key area and reference harmony; "
@@ -663,10 +689,13 @@ def _bpm(analysis: dict) -> int:
     return int(max(80, min(150, round(value))))
 
 
-def _key_scale(analysis: dict) -> str:
-    transform = analysis.get("reference_transform") or {}
-    harmonic = (transform or {}).get("harmonic") or {}
-    key = str(harmonic.get("key") or analysis.get("key") or "").strip()
+def _key_scale(analysis: dict, target_key: str | None = None) -> str:
+    if target_key:
+        key = target_key
+    else:
+        transform = analysis.get("reference_transform") or {}
+        harmonic = (transform or {}).get("harmonic") or {}
+        key = str(harmonic.get("key") or analysis.get("key") or "").strip()
     if not key or key.lower() == "unknown":
         return ""
     parts = key.replace("minor", "Minor").replace("major", "Major").split()
@@ -695,7 +724,7 @@ def _submit_task(base_url: str, payload: dict) -> str:
     reference_path = payload.pop("reference_audio_path", None)
     src_path = payload.pop("src_audio_path", None)
     files = {}
-    if reference_path:
+    if reference_path and os.path.abspath(reference_path) != os.path.abspath(src_path or ""):
         files["reference_audio"] = reference_path
     if src_path:
         files["ctx_audio"] = src_path

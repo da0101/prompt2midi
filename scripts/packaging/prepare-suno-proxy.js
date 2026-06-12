@@ -6,6 +6,8 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const ANALYSIS_PYTHON = process.env.PROMPT2MIDI_ANALYSIS_PYTHON || process.env.PROMPT2MIDI_PYTHON || 'python3';
+const MIN_PROXY_DURATION_SECONDS = 6;
+const MAX_PROXY_DURATION_SECONDS = 600;
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -31,8 +33,13 @@ async function main() {
 
   const fullDuration = ['full', 'reference', 'track', 'source'].includes(String(duration).trim().toLowerCase());
   const durationNumber = fullDuration ? null : Number.parseFloat(duration);
-  if (!fullDuration && (!Number.isFinite(durationNumber) || durationNumber < 6 || durationNumber > 60)) {
-    return fail('--duration must be a number between 6 and 60 seconds, or full.');
+  if (
+    !fullDuration &&
+    (!Number.isFinite(durationNumber) ||
+      durationNumber < MIN_PROXY_DURATION_SECONDS ||
+      durationNumber > MAX_PROXY_DURATION_SECONDS)
+  ) {
+    return fail(`--duration must be a number between ${MIN_PROXY_DURATION_SECONDS} and ${MAX_PROXY_DURATION_SECONDS} seconds, or full.`);
   }
   if (start !== undefined) {
     const startNumber = Number.parseFloat(start);
@@ -107,7 +114,7 @@ Meaning:
   --proxy-audio   Newly generated proxy demo. This is the only audio prepared for Suno upload.
   --output-dir    Folder where the Suno proxy package will be written.
   --prompt        Optional copyright-safe direction for Suno.
-  --duration      Upload clip length, 6-60 seconds, or full for the full proxy track; default 30.
+  --duration      Upload length, 6-600 seconds, or full for the full proxy track; default 30.
   --start         Optional manual start time inside the proxy audio.
 
 Output:

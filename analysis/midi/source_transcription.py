@@ -107,14 +107,21 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
             maximum_frequency=450,
         )
         if stem_run["ok"]:
-            stem_bass_notes = _extract_bassline(stem_run["notes"])
+            stem_bass_notes = _extract_bassline(
+                stem_run["notes"],
+                bpm=bpm,
+                minimum_note=28,
+                maximum_note=60,
+                velocity_floor=35,
+                house_cleanup=True,
+            )
             if stem_bass_notes:
                 stem_bass_path = write_note_events_midi(
                     str(Path(output_dir) / "source-bass-transcription.mid"),
                     stem_bass_notes,
                     bpm=bpm or 120,
                 )
-                stem_method = f"{(stem_result or {}).get('method', 'stem_separation')}+basic_pitch_coreml"
+                stem_method = f"{(stem_result or {}).get('method', 'stem_separation')}+basic_pitch_coreml+house_bass_grid_cleanup"
                 tracks.append(
                     ModelTrack(
                         key="source_bass_transcription",
@@ -125,6 +132,8 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
                         confidence=_confidence_from_notes(stem_bass_notes),
                         limitations=[
                             "Bass MIDI was transcribed from a separated bass stem.",
+                            "Sub-bass notes down to MIDI 28 are allowed for generated house/electro bass lines.",
+                            "Bass starts are snapped to the 16th-note producer grid and repeated-position clutter is reduced.",
                             "Stem separation can still leak kick, guitar, vocal, or synth lows; verify by ear.",
                         ],
                         source_method=stem_method,
@@ -139,7 +148,7 @@ def transcribe_with_model(audio_path: str, output_dir: str, bpm: float | None, s
         else:
             warnings.append("Stem-aware Basic Pitch failed: " + stem_run["warning"])
 
-    bass_notes = _extract_bassline(notes)
+    bass_notes = _extract_bassline(notes, bpm=bpm, minimum_note=36, maximum_note=60, velocity_floor=45)
     if bass_notes:
         bass_path = write_note_events_midi(str(Path(output_dir) / "model-bass-transcription.mid"), bass_notes, bpm=bpm or 120)
         _progress(f"model transcription: wrote model-bass-transcription.mid with {len(bass_notes)} notes")
@@ -264,28 +273,44 @@ def _read_note_events(path: str) -> list[dict]:
     return events
 
 
-def _extract_bassline(events: list[dict]) -> list[dict]:
-    low_notes = [event for event in events if 36 <= int(event["midi_note"]) <= 60 and int(event["velocity"]) >= 45]
+def _extract_bassline(
+    events: list[dict],
+    *,
+    bpm: float | None = None,
+    minimum_note: int = 36,
+    maximum_note: int = 60,
+    velocity_floor: int = 45,
+    house_cleanup: bool = False,
+) -> list[dict]:
+    low_notes = [
+        event
+        for event in events
+        if minimum_note <= int(event["midi_note"]) <= maximum_note and int(event["velocity"]) >= velocity_floor
+    ]
     if not low_notes:
         return []
 
-    bin_seconds = 0.25
+    bin_seconds = _bass_grid_seconds(bpm) if bpm else 0.25
     bins: dict[int, dict] = {}
     for event in low_notes:
-        index = int(float(event["start"]) / bin_seconds)
+        index = int(round(float(event["start"]) / bin_seconds))
         current = bins.get(index)
         if current is None:
             bins[index] = event
             continue
-        if (int(event["midi_note"]), -int(event["velocity"])) < (int(current["midi_note"]), -int(current["velocity"])):
+        if _bass_candidate_rank(event) < _bass_candidate_rank(current):
             bins[index] = event
+
+    if house_cleanup:
+        bins = _reduce_to_repeating_house_positions(bins, bin_seconds)
 
     collapsed: list[dict] = []
     current: dict | None = None
     for index in sorted(bins):
         event = dict(bins[index])
         event["start"] = round(index * bin_seconds, 3)
-        event["duration"] = bin_seconds
+        event["duration"] = round(_bass_note_duration(event, bin_seconds), 3)
+        event["midi_note"] = _normalize_sub_bass_register(int(event["midi_note"]), minimum_note, maximum_note)
         if current and current["midi_note"] == event["midi_note"] and event["start"] <= current["start"] + current["duration"] + 0.001:
             current["duration"] = round((event["start"] + event["duration"]) - current["start"], 3)
             current["velocity"] = max(int(current["velocity"]), int(event["velocity"]))
@@ -296,6 +321,71 @@ def _extract_bassline(events: list[dict]) -> list[dict]:
     if current:
         collapsed.append(current)
     return collapsed
+
+
+def _bass_grid_seconds(bpm: float | None) -> float:
+    beat = 60.0 / max(40.0, min(220.0, bpm or 120.0))
+    return max(0.068, min(0.18, beat / 4.0))
+
+
+def _bass_candidate_rank(event: dict) -> tuple[int, int]:
+    note = int(event["midi_note"])
+    velocity = int(event["velocity"])
+    return (note, -velocity)
+
+
+def _bass_note_duration(event: dict, bin_seconds: float) -> float:
+    duration = float(event.get("duration") or bin_seconds)
+    if duration <= bin_seconds * 1.25:
+        return bin_seconds
+    return min(duration, bin_seconds * 4.0)
+
+
+def _normalize_sub_bass_register(note: int, minimum_note: int, maximum_note: int) -> int:
+    while note > maximum_note:
+        note -= 12
+    while note < minimum_note and note + 12 <= maximum_note:
+        note += 12
+    return max(minimum_note, min(maximum_note, note))
+
+
+def _reduce_to_repeating_house_positions(bins: dict[int, dict], bin_seconds: float) -> dict[int, dict]:
+    if len(bins) <= 8:
+        return bins
+    max_index = max(bins)
+    bars = max(1.0, (max_index + 1) / 16.0)
+    counts: dict[int, int] = {}
+    velocity_scores: dict[int, int] = {}
+    for index, event in bins.items():
+        position = index % 16
+        counts[position] = counts.get(position, 0) + 1
+        velocity_scores[position] = velocity_scores.get(position, 0) + int(event.get("velocity") or 0)
+
+    average_events_per_bar = len(bins) / bars
+    if average_events_per_bar <= 6.0:
+        return bins
+
+    min_support = max(2, round(bars * 0.16))
+    supported = [position for position, count in counts.items() if count >= min_support]
+    if not supported:
+        return bins
+    preferred_offbeats = {2, 3, 6, 7, 10, 11, 14, 15}
+    ranked = sorted(
+        supported,
+        key=lambda position: (
+            position not in preferred_offbeats,
+            -counts[position],
+            -velocity_scores[position],
+            position,
+        ),
+    )
+    preferred_supported = [position for position in ranked if position in preferred_offbeats]
+    if len(preferred_supported) >= 4:
+        max_positions = min(8, len(preferred_supported))
+    else:
+        max_positions = 8 if bin_seconds <= 0.14 else 6
+    keep_positions = set(ranked[:max_positions])
+    return {index: event for index, event in bins.items() if index % 16 in keep_positions}
 
 
 def _confidence_from_notes(events: list[dict]) -> float:
