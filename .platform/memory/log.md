@@ -5,6 +5,7 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-06-23 — commit `9f0aa0f`: chore: log develop handoff checkpoint — auto-logged
 - 2026-06-23 — commit `491a8ca`: chore: checkpoint develop handoff — auto-logged
 - 2026-06-12 — commit `01c03bc`: Record arrangement workflow checkpoint — auto-logged
 - 2026-06-12 — commit `b3afa2b`: Add underground house arrangement workflow — auto-logged
