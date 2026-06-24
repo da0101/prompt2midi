@@ -9,7 +9,7 @@ repo_ids: [prompt2midi]
 base_branch: develop
 git_branch: feature/stems-splitting-midi-mapping
 created_at: 2026-05-06
-updated_at: 2026-05-29
+updated_at: 2026-06-23
 closure_approved: false
 ---
 
@@ -71,14 +71,18 @@ _Append-only. Format: `YYYY-MM-DD — <decision> — <rationale>`_
 ## Resume state
 _Overwritten by `ab checkpoint` — the compact payload the next agent reads first. Keep this block under ~10 lines._
 
-- **Last updated:** 2026-05-29 by danilulmashev
-- **What just happened:** Regenerated Per Hammar candidate 3 and Dikka candidate 4 final packages with corrected drum packaging. Main arranged-stems keep Suno drums.wav; percussion-reference-stems contain arranged kick/snare/hihats/cymbals/toms guides from the existing better split folders. Added --percussion-reference-input-dir and tests.
+- **Last updated:** 2026-06-23 by danilulmashev
+- **What just happened:** Prepared develop for continuation on another computer; committing and pushing current workflow metadata plus existing local commits.
 - **Current focus:** —
-- **Next action:** Audition the Desktop final-package-v2 folders in Ableton; use feedback to refine second-half/outro math without changing the drum export contract.
+- **Next action:** Continue from pushed develop on the other computer; audition the Desktop final-package-v2 folders in Ableton and use feedback to refine second-half/outro math without changing the drum export contract.
 - **Blockers:** none
 
 ## Progress log
 _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 10 entries. Format: `YYYY-MM-DD HH:MM — <what happened>`._
+
+2026-06-23 21:50 — Prepared develop for continuation on another computer; committing and pushing current workflow metadata plus existing local commits.
+
+2026-06-23 21:48 — auto-checkpoint: Codex session ended without manual checkpoint
 
 2026-05-29 19:03 — Regenerated Per Hammar candidate 3 and Dikka candidate 4 final packages with corrected drum packaging. Main arranged-stems keep Suno drums.wav; percussion-reference-stems contain arranged kick/snare/hihats/cymbals/toms guides from the existing better split folders. Added --percussion-reference-input-dir and tests.
 
@@ -95,10 +99,6 @@ _Append-only. `ab checkpoint` prepends a dated line and auto-trims to the last 1
 2026-05-28 23:14 — Added reusable second_half_extra_bars arranger control and rendered Dikka Suno-priority long-second-half test
 
 2026-05-28 22:56 — Added generic reference-blueprint continuation mode, preserve_source_start_bars skip control, bar-snapped target rendering, regression tests, and rendered Dikka candidate-4 reference-blueprint v7 with source-audio copies.
-
-2026-05-28 22:20 — Rendered same-format Dikka candidate-4 arrangement test using Suno stems, MDX23C drum substems, 126 BPM bar-locked 200-bar structure, and source-audio copies for Suno/ACE/reference comparison.
-
-2026-05-28 22:00 — Fixed arrangement stem role inference so filename roles override parent folder names, rerendered v8 with exported kick/snare/hihats/toms/cymbals plus bass/synths/fx, and documented the accepted arrangement/percussion export rule.
 
 ## Open questions
 _Things blocked on user input. Remove when resolved._
