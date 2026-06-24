@@ -45,7 +45,19 @@ const reconstructionDiagnostic = ref(false)
 const outputName = ref('')
 const autoStopAce = ref(true)
 const droppedOutputDir = ref(null)
+const referenceInfo = ref(null)
+const referenceInfoStatus = ref('idle')
 const isFullTrack = computed(() => renderMode.value === 'full-track')
+const referenceLengthLabel = computed(() => (
+  referenceInfo.value?.durationSeconds ? formatDuration(referenceInfo.value.durationSeconds) : null
+))
+const fullTrackDescription = computed(() => {
+  const target = referenceLengthLabel.value ? `the full ${referenceLengthLabel.value} reference length` : 'the full detected reference length'
+  return `Generates a coherent local seed up to ${aceCaps.value.maxDurationSeconds}s and packages it with a detailed prompt for ${target}; long one-shot generation is disabled by default to avoid local GPU memory failure.`
+})
+const fullTrackDurationLabel = computed(() => (
+  referenceLengthLabel.value ? `seed + ${referenceLengthLabel.value} prompt` : 'seed + full prompt'
+))
 
 function defaultAceCaps() {
   return {
@@ -85,6 +97,13 @@ function producerCopy(text) {
     .replace(/\bACE\b/g, 'local generator')
 }
 
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0))
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
 const acePresets = {
   custom: null,
   clone_25: {
@@ -107,16 +126,16 @@ const acePresets = {
     prompt: DEFAULT_PROMPT,
     similarity: 'very-high',
     referenceStrength: 0.56,
-    coverNoiseStrength: 0.3,
+    coverNoiseStrength: 0.2,
     aceSeed: -1,
     reconstructionDiagnostic: false,
   },
   clone_100: {
     prompt: DEFAULT_PROMPT,
     similarity: 'near-identical',
-    referenceStrength: 1,
-    coverNoiseStrength: 1,
-    aceSeed: 1234,
+    referenceStrength: 0.42,
+    coverNoiseStrength: 0.2,
+    aceSeed: -1,
     geminiBrief: false,
     geminiControl: false,
     reconstructionDiagnostic: false,
@@ -141,16 +160,16 @@ const acePresets = {
     prompt: TRIBAL_DRUM_PROMPT,
     similarity: 'very-high',
     referenceStrength: 0.56,
-    coverNoiseStrength: 0.3,
+    coverNoiseStrength: 0.2,
     aceSeed: -1,
     reconstructionDiagnostic: false,
   },
   tribal_100: {
     prompt: TRIBAL_DRUM_PROMPT,
     similarity: 'near-identical',
-    referenceStrength: 1,
-    coverNoiseStrength: 1,
-    aceSeed: 1234,
+    referenceStrength: 0.42,
+    coverNoiseStrength: 0.2,
+    aceSeed: -1,
     geminiBrief: false,
     geminiControl: false,
     reconstructionDiagnostic: false,
@@ -187,6 +206,34 @@ onMounted(async () => {
 function onRefChange(val) {
   reference.value = val
   if (val) validationError.value = ''
+  loadReferenceInfo(val)
+}
+
+let referenceInfoRequest = 0
+async function loadReferenceInfo(filePath) {
+  const requestId = ++referenceInfoRequest
+  referenceInfo.value = null
+  const cleaned = String(filePath || '').trim()
+  if (!cleaned) {
+    referenceInfoStatus.value = 'idle'
+    return
+  }
+  referenceInfoStatus.value = 'loading'
+  try {
+    const response = await fetch('/api/audio-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: cleaned }),
+    })
+    if (!response.ok) throw new Error(`API returned ${response.status}`)
+    const info = await response.json()
+    if (requestId !== referenceInfoRequest) return
+    referenceInfo.value = info
+    referenceInfoStatus.value = 'ready'
+  } catch {
+    if (requestId !== referenceInfoRequest) return
+    referenceInfoStatus.value = 'error'
+  }
 }
 
 function onOutDrop(fullPath) {
@@ -223,6 +270,8 @@ function reset() {
   reconstructionDiagnostic.value = false
   prompt.value = DEFAULT_PROMPT
   reference.value = ''
+  referenceInfo.value = null
+  referenceInfoStatus.value = 'idle'
   outputName.value = ''
   droppedOutputDir.value = null
 
@@ -293,6 +342,12 @@ defineExpose({ get autoStopAce() { return autoStopAce.value } })
           pick="file"
           @update:model-value="onRefChange"
         />
+        <p v-if="referenceInfoStatus === 'loading'" class="mt-1.5 text-xs text-muted-foreground">
+          Reading reference length...
+        </p>
+        <p v-else-if="referenceLengthLabel" class="mt-1.5 text-xs text-muted-foreground">
+          Reference length: {{ referenceLengthLabel }}
+        </p>
       </div>
 
       <!-- Prompt -->
@@ -323,7 +378,7 @@ defineExpose({ get autoStopAce() { return autoStopAce.value } })
         </Select>
         <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
           {{ isFullTrack
-            ? 'Uses the full reference duration automatically and skips section stitching.'
+            ? fullTrackDescription
             : 'Uses the selected start time and duration for a faster calibration render.' }}
         </p>
       </div>
@@ -353,7 +408,7 @@ defineExpose({ get autoStopAce() { return autoStopAce.value } })
         <div>
           <Label class="text-xs text-muted-foreground block mb-1.5">
             Ref start (s)
-            <FieldTooltip :text="isFullTrack ? 'Full-track mode starts at the beginning and follows the full generated duration.' : 'Where the generator starts listening in the song. Use this to skip the intro and point at the best groove.'" />
+            <FieldTooltip :text="isFullTrack ? 'Full-track mode starts at the beginning, then extends from the generated ending instead of rendering unrelated sections.' : 'Where the generator starts listening in the song. Use this to skip the intro and point at the best groove.'" />
           </Label>
           <Input v-if="isFullTrack" model-value="auto" disabled class="h-9 text-sm" />
           <Input v-else v-model.number="referenceStart" type="number" min="0" step="0.5" class="h-9 text-sm" />
@@ -365,9 +420,9 @@ defineExpose({ get autoStopAce() { return autoStopAce.value } })
         <div>
           <Label class="text-xs text-muted-foreground block mb-1.5">
             Duration
-          <FieldTooltip :text="isFullTrack ? 'Full-track mode uses the detected full reference length automatically.' : `How long the new clip should be. Longer clips take longer and use more memory. This computer/model allows up to ${aceCaps.maxDurationSeconds}s here.`" />
+            <FieldTooltip :text="isFullTrack ? `Full-track mode analyzes the full reference and creates a coherent local seed up to ${aceCaps.maxDurationSeconds}s, then writes the full-length SUNO prompt. Long local one-shot generation is disabled by default because it can run out of Apple GPU memory.` : `How long the new clip should be. Longer clips take longer and use more memory. This computer/model allows up to ${aceCaps.maxDurationSeconds}s here.`" />
         </Label>
-          <Input v-if="isFullTrack" model-value="full reference" disabled class="h-9 text-sm" />
+          <Input v-if="isFullTrack" :model-value="fullTrackDurationLabel" disabled class="h-9 text-sm" />
           <Input v-else v-model.number="duration" type="number" min="10" :max="aceCaps.maxDurationSeconds" step="1" class="h-9 text-sm" />
         </div>
         <div>

@@ -5,6 +5,14 @@ One line per completed task. Newest at the top. Append-only.
 Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 
 ---
+- 2026-06-23 — commit `9f0aa0f`: chore: log develop handoff checkpoint — auto-logged
+- 2026-06-23 — commit `491a8ca`: chore: checkpoint develop handoff — auto-logged
+- 2026-06-12 — commit `01c03bc`: Record arrangement workflow checkpoint — auto-logged
+- 2026-06-12 — commit `b3afa2b`: Add underground house arrangement workflow — auto-logged
+- 2026-05-24 — commit `3a956ec`: update — auto-logged
+- 2026-05-06 — debug: unusable ACE stem MIDI — fixed root cause: rough Basic Pitch/fallback MIDI was being promoted as recommended without musical quality gates; drum fallback now caps dominant grid positions and all unvalidated transcription MIDI stays debug-only — never package source MIDI as recommended until timing/register/key/density validation exists.
+- 2026-05-06 — stems-splitting-midi-mapping Phase 1 — added ACE-output stem role mapping, flexible Demucs stem preservation, proxy-run `--map-stems`, and dynamic role regression tests — keep the feature honest by planning/skipping MIDI when transcription is not justified.
+- 2026-05-06 — stems-splitting-midi-mapping stream registered — created `feature/stems-splitting-midi-mapping` from `develop` and recorded ACE-output-as-source plus dynamic stem-role decisions — next work is architecture/research before implementation.
 - 2026-05-06 — documentation/platform refresh — README and `.platform` now describe current architecture, open-source positioning, DAW inspiration/pre-SUNO lanes, stem/MIDI limitations, JUCE AU/VST next work, CODEOWNERS, and `develop` default branch flow — keep public docs and agent memory aligned before more coding.
 - 2026-05-06 — git flow setup — created `develop` as the integration/default branch policy and reserved `main` for release merges/tags — feature streams should branch from `develop`.
 - 2026-05-05 — commit `78ccdae`: chore: reorganize project cleanup layout — auto-logged
@@ -99,3 +107,6 @@ Format: `YYYY-MM-DD — <task> — <outcome> — <takeaway>`
 2026-05-05 — debug: CLI looked stuck after Hugging Face warning — fixed root cause: CLAP/HF genre detection ran inside one broad deep-analysis step without sub-progress; deep analysis now reports genre classifier import/audio prep/model load/inference plus chord and structure substeps.
 2026-05-05 — cleanup: project-cleanup-restructure-v1 first pass — reorganized `analysis/` into responsibility folders, converted Python/Node callers to direct package/module paths with no importer shims, removed tracked generated web build output and dead helpers, and verified Python/Node/web/Agentboard checks.
 2026-05-05 — cleanup: project-cleanup-restructure-v1 support layout — grouped `scripts/` by role, moved optional dependency pins into `requirements/`, grouped docs by topic, preserved npm command names, fixed the All-In-One Docker adapter path, and verified Node/Python/Agentboard checks.
+2026-05-24 — debug: full-track ACE UI submitted 466s generation — fixed root cause: full-track mode passed `duration=full` without the local generator max-duration cap, so long references reached ACE as over-limit jobs; UI now passes the hardware/model cap and Python clamps full-source sample duration before submission.
+2026-05-24 — debug: key-shift prompt contradicted reference-key guard — fixed root cause: explicit transpose/key-shift prompts were mixed with generated reference-key wording; target-key intent now overrides harmonic, model, groove, compact-transform, ACE caption, and ACE key metadata text, with regression coverage for G# minor -> A# minor.
+2026-05-28 — debug: percussion stems missing from arrangement export — fixed root cause: stem role detection let parent folder names override clear filenames, so folders containing `percussion` misclassified `bass.wav`, `fx.wav`, and `synth.wav`; filename role now wins and v8 exports kick/snare/hihats/toms/cymbals plus bass/synths/fx.

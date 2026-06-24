@@ -361,6 +361,7 @@ async function main() {
   if (args.guidance) env.PROMPT2MIDI_ACE_STEP_GUIDANCE = args.guidance;
   if (args.seed) env.PROMPT2MIDI_ACE_STEP_SEED = args.seed;
   if (args.duration || args.sampleDuration) env.PROMPT2MIDI_REFERENCE_SAMPLE_DURATION = args.duration || args.sampleDuration;
+  if (args.referenceConditioningDuration) env.PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION = args.referenceConditioningDuration;
   if (args.referenceStart) env.PROMPT2MIDI_REFERENCE_SECTION_START = args.referenceStart;
   if (args.referenceStrategy) env.PROMPT2MIDI_REFERENCE_SECTION_STRATEGY = args.referenceStrategy;
   if (args.selectCandidate) env.PROMPT2MIDI_ACE_STEP_SELECT_CANDIDATE = args.selectCandidate;
@@ -503,6 +504,8 @@ Options:
   --candidates <n>              ACE candidate count. Defaults to 4 normal candidates; max 6.
   --duration <seconds|full>     Generated candidate length. Defaults to 30 seconds; use full/reference for source length.
   --sample-duration <value>     Alias for --duration.
+  --reference-conditioning-duration <seconds>
+                               Use a shorter/longer source-conditioning window than the generated candidate length.
   --reference-start <seconds>   Force the local reference section used to condition ACE.
   --reference-strategy <name>   Section picker: stable_energy or early_character.
   --select-candidate <n>        Promote a specific generated candidate to sample.wav after auditioning.

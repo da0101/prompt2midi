@@ -176,7 +176,7 @@ def _choose_proxy_section(duration: float, upload_duration: float | str, start_s
     if full_upload:
         window = duration
     else:
-        window = max(6.0, min(60.0, float(upload_duration), duration))
+        window = max(6.0, min(float(upload_duration), duration))
     start = 0.0 if start_seconds is None else max(0.0, min(float(start_seconds), max(0.0, duration - window)))
     return {
         "start_seconds": round(start, 3),

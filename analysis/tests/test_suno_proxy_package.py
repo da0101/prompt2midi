@@ -71,6 +71,14 @@ class SunoProxyPackageTest(unittest.TestCase):
         self.assertEqual(section["duration_seconds"], 360.12)
         self.assertEqual(section["method"], "proxy_full_track")
 
+    def test_numeric_long_upload_duration_is_not_clipped_to_short_preview(self):
+        section = suno_proxy_package._choose_proxy_section(240.0, "240", None)
+
+        self.assertEqual(section["start_seconds"], 0.0)
+        self.assertEqual(section["end_seconds"], 240.0)
+        self.assertEqual(section["duration_seconds"], 240.0)
+        self.assertEqual(section["method"], "proxy_start")
+
     def _analysis(self):
         return {
             "duration_seconds": 8.0,

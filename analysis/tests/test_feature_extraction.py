@@ -7,7 +7,13 @@ import unittest
 import wave
 from unittest import mock
 
-from analysis.analyze import _promote_exports, _prompt_vocal_hint, _reference_sample_duration, run as run_analysis
+from analysis.analyze import (
+    _promote_exports,
+    _prompt_vocal_hint,
+    _reference_conditioning_duration,
+    _reference_sample_duration,
+    run as run_analysis,
+)
 from analysis.arrangement.full_arrangement import build_arrangement_map, build_full_arrangement_package
 from analysis.core.beat_grid import analyze_beat_grid
 from analysis.core.external_analyzers import analyze_allin1_structure, analyze_essentia_descriptors
@@ -909,13 +915,13 @@ class FeatureExtractionTest(unittest.TestCase):
             export_files = _promote_exports(os.path.join(temp_dir, "job"), midi_files, assets)
 
         assets_by_key = {asset["key"]: asset for asset in assets}
-        self.assertIn("model_transcription", export_files)
-        self.assertIn("source_bass_transcription", export_files)
+        self.assertNotIn("model_transcription", export_files)
+        self.assertNotIn("source_bass_transcription", export_files)
         self.assertIn("source_drum_groove", export_files)
         self.assertNotIn("reference_sketch", export_files)
         self.assertNotIn("model_bass_transcription", export_files)
-        self.assertTrue(assets_by_key["model_transcription"]["is_recommended_output"])
-        self.assertTrue(assets_by_key["source_bass_transcription"]["is_recommended_output"])
+        self.assertFalse(assets_by_key["model_transcription"]["is_recommended_output"])
+        self.assertFalse(assets_by_key["source_bass_transcription"]["is_recommended_output"])
         self.assertFalse(assets_by_key["reference_sketch"]["is_recommended_output"])
 
     def test_reference_transform_keeps_groove_and_replaces_stab_role(self):
@@ -1095,6 +1101,39 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("priority drum layer", caption)
         self.assertIn("dense tribal percussion", caption)
         self.assertIn("not sparse generic hats", caption)
+
+    def test_transpose_prompt_overrides_reference_key_harmonic_guard(self):
+        prompt = (
+            "keep the same underground house ambience, but transpose all musical material "
+            "up exactly 2 semitones from G# minor to A# minor. Bassline must use A# minor notes."
+        )
+        analysis = {
+            "bpm": 126.0,
+            "key": "G# minor",
+            "genre": {"primary": "house", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+            "vocals": {"present": False},
+        }
+        analysis["reference_transform"] = build_reference_transform(prompt, analysis)
+
+        conditioned = _condition_prompt(prompt, {}, analysis["reference_transform"])
+        caption = _caption(prompt, analysis)
+        payload = _build_payload(
+            reference_audio=__file__,
+            prompt=conditioned,
+            analysis=analysis,
+            duration_seconds=15,
+            candidate_count=1,
+            model="test-model",
+        )
+
+        self.assertIn("tuned inside A# minor", conditioned)
+        self.assertIn("target key area A# minor", conditioned)
+        self.assertNotIn("tuned inside G# minor", conditioned)
+        self.assertIn("tuned inside A# minor", caption)
+        self.assertIn("requested target key area: A# minor", caption)
+        self.assertNotIn("tuned inside G# minor", caption)
+        self.assertEqual(payload["key_scale"], "A# Minor")
+        self.assertEqual(payload["keyscale"], "A# Minor")
 
     def test_detected_tribal_percussion_raises_ace_source_hold(self):
         transform = build_reference_transform(
@@ -1456,6 +1495,49 @@ class FeatureExtractionTest(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_cover_payload_uses_single_source_audio_upload_by_default(self):
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "PROMPT2MIDI_ACE_STEP_TASK_TYPE",
+                "PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH",
+                "PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH",
+                "PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE",
+            )
+        }
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_TASK_TYPE"] = "cover"
+            os.environ["PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH"] = "0.42"
+            os.environ["PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH"] = "0.2"
+            os.environ.pop("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE", None)
+            analysis = {
+                "reference_similarity_level": "near-identical",
+                "bpm": 124.0,
+                "key": "G# major",
+                "genre": {"primary": "house", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+                "vocals": {"present": False},
+            }
+            analysis["reference_transform"] = build_reference_transform("same tempo and key area", analysis)
+
+            payload = _build_payload(
+                reference_audio=__file__,
+                prompt="same tempo and key area",
+                analysis=analysis,
+                duration_seconds=120,
+                candidate_count=1,
+                model="test-model",
+            )
+
+            self.assertEqual(payload["task_type"], "cover")
+            self.assertIsNone(payload["reference_audio_path"])
+            self.assertEqual(payload["src_audio_path"], os.path.abspath(__file__))
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_fast_lane_conditional_vocal_wording_does_not_force_vocal_resynthesis(self):
         vocal_hint = _prompt_vocal_hint("new synth or vocal hook if reference has vocals")
         self.assertFalse(vocal_hint["present"])
@@ -1662,7 +1744,9 @@ class FeatureExtractionTest(unittest.TestCase):
 
     def test_reference_sample_duration_can_use_full_source_length(self):
         previous = os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION")
+        previous_max = os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION")
         try:
+            os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION", None)
             os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "full"
             self.assertEqual(_reference_sample_duration({"duration_seconds": 211.5}), 211.5)
             os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "45"
@@ -1674,6 +1758,40 @@ class FeatureExtractionTest(unittest.TestCase):
                 os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION", None)
             else:
                 os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = previous
+            if previous_max is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"] = previous_max
+
+    def test_reference_sample_duration_caps_full_source_length_when_configured(self):
+        previous = os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION")
+        previous_max = os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION")
+        try:
+            os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = "full"
+            os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"] = "120"
+            self.assertEqual(_reference_sample_duration({"duration_seconds": 466.0}), 120.0)
+            self.assertEqual(_reference_sample_duration({"duration_seconds": 89.0}), 89.0)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_DURATION"] = previous
+            if previous_max is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"] = previous_max
+
+    def test_reference_conditioning_duration_can_be_shorter_than_output(self):
+        previous = os.environ.get("PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION")
+        try:
+            os.environ["PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION"] = "120"
+            self.assertEqual(_reference_conditioning_duration({"duration_seconds": 466.0}, 280.0), 120.0)
+            self.assertEqual(_reference_conditioning_duration({"duration_seconds": 89.0}, 280.0), 89.0)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION", None)
+            else:
+                os.environ["PROMPT2MIDI_REFERENCE_CONDITIONING_DURATION"] = previous
 
     def test_low_similarity_candidate_selection_prefers_originality(self):
         close_copy = _selection_score(quality_score=0.82, exact_similarity_score=0.72, target_similarity=0.2)

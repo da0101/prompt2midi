@@ -30,6 +30,10 @@ const NON_DIAGNOSTIC_NEAR_COPY = {
   coverNoiseStrength: 0.2,
   aceSeed: -1,
 };
+const NON_DIAGNOSTIC_SAFE_SOURCE_LIMITS = {
+  referenceStrength: 0.56,
+  coverNoiseStrength: 0.2,
+};
 
 const STEP_PROGRESS = [
   [/starting local generator/i, 3],
@@ -49,6 +53,7 @@ const STEP_PROGRESS = [
   [/downloading candidate/i, 84],
   [/scoring candidate/i, 88],
   [/generation finished|selecting proxy audio/i, 91],
+  [/full-track extension/i, 92],
   [/preparing Suno proxy package|preparing generated proxy|suno-proxy/i, 94],
   [/Suno proxy package ready/i, 98],
 ];
@@ -74,11 +79,18 @@ function createRun(input) {
   // Keep this second pipeline: it is promising, but it still needs careful fine tuning before exposure.
   const reconstructionDiagnostic = false;
   const downgradedUnsafeCloneControls = !reconstructionDiagnostic && referenceStrength >= 0.95 && coverNoiseStrength >= 0.95;
+  const clampedUnsafeSourceControls = !downgradedUnsafeCloneControls && !reconstructionDiagnostic && (
+    referenceStrength > NON_DIAGNOSTIC_SAFE_SOURCE_LIMITS.referenceStrength ||
+    coverNoiseStrength > NON_DIAGNOSTIC_SAFE_SOURCE_LIMITS.coverNoiseStrength
+  );
   if (downgradedUnsafeCloneControls) {
     similarityLevel = NON_DIAGNOSTIC_NEAR_COPY.similarityLevel;
     referenceStrength = NON_DIAGNOSTIC_NEAR_COPY.referenceStrength;
     coverNoiseStrength = NON_DIAGNOSTIC_NEAR_COPY.coverNoiseStrength;
     aceSeed = NON_DIAGNOSTIC_NEAR_COPY.aceSeed;
+  } else if (clampedUnsafeSourceControls) {
+    referenceStrength = Math.min(referenceStrength, NON_DIAGNOSTIC_SAFE_SOURCE_LIMITS.referenceStrength);
+    coverNoiseStrength = Math.min(coverNoiseStrength, NON_DIAGNOSTIC_SAFE_SOURCE_LIMITS.coverNoiseStrength);
   }
   const geminiBrief = reconstructionDiagnostic ? false : truthyCheckbox(input.geminiBrief);
   const geminiControl = reconstructionDiagnostic ? false : truthyCheckbox(input.geminiControl);
@@ -125,6 +137,7 @@ function createRun(input) {
     error: null,
     reportedArtifacts: {},
     downgradedUnsafeCloneControls,
+    clampedUnsafeSourceControls,
   };
   runs.set(id, run);
   prepareAndStartRun(run);
@@ -435,9 +448,12 @@ function startRun(run) {
     '--candidates', String(input.candidates),
     '--reference-start', String(input.referenceStart),
     '--prompt', input.prompt,
+    '--map-stems',
   ];
   if (input.vocals) args.push('--vocals');
   else args.push('--instrumental');
+  if (input.fullTrack) args.push('--extend-full-track');
+  if (input.fullTrack) args.push('--full-track-strategy', 'continuation');
   if (input.geminiControl) args.push('--gemini-control');
   else if (input.geminiBrief) args.push('--gemini-brief');
 
@@ -449,6 +465,7 @@ function startRun(run) {
     PROMPT2MIDI_ACE_STEP_STEPS: String(input.aceSteps),
     PROMPT2MIDI_ACE_STEP_GUIDANCE: String(input.aceGuidance),
     PROMPT2MIDI_ACE_STEP_SEED: String(input.aceSeed),
+    PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION: String(getAceCapabilities().maxDurationSeconds),
     PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC: input.reconstructionDiagnostic ? '1' : '0',
     PROMPT2MIDI_DISABLE_GEMINI: input.reconstructionDiagnostic ? '1' : process.env.PROMPT2MIDI_DISABLE_GEMINI,
     PROMPT2MIDI_TRACE_PROGRESS: '1',
@@ -459,12 +476,14 @@ function startRun(run) {
   addEvent(run, 'trace', `ui api pid ${process.pid}; started ${serverStartedAt}`);
   addEvent(run, 'trace', `run uuid ${run.id}`);
   addEvent(run, 'trace', `output dir ${input.outputDir}`);
-  addEvent(run, 'trace', `requested controls: mode=${input.renderMode}; similarity=${input.similarityLevel}; reference_guidance=${input.referenceStrength}; audio_start_amount=${input.coverNoiseStrength}; steps=${input.aceSteps}; guidance=${input.aceGuidance}; seed=${input.aceSeed}; ref_start=${input.referenceStart}s; duration=${input.duration}; candidates=${input.candidates}`);
+  addEvent(run, 'trace', `requested controls: mode=${input.renderMode}; similarity=${input.similarityLevel}; reference_guidance=${input.referenceStrength}; audio_start_amount=${input.coverNoiseStrength}; steps=${input.aceSteps}; guidance=${input.aceGuidance}; seed=${input.aceSeed}; ref_start=${input.referenceStart}s; duration=${input.duration}; candidates=${input.candidates}; map_stems=on`);
   if (input.fullTrack) {
-    addEvent(run, 'trace', 'Full-track mode: one continuous render using the full reference duration; section stitching is not used.');
+    addEvent(run, 'trace', `Full-track mode: local-safe strategy generates a coherent seed up to ${getAceCapabilities().maxDurationSeconds}s and packages it with the full reference-length SUNO prompt; long one-shot and repaint extension are disabled by default to avoid MPS out-of-memory.`);
   }
   if (run.downgradedUnsafeCloneControls) {
     addEvent(run, 'warning', 'Diagnostic was off but source controls were 1/1; downgraded to normal near-identical controls 0.42/0.20 to avoid an accidental clone.');
+  } else if (run.clampedUnsafeSourceControls) {
+    addEvent(run, 'warning', `Source guidance was above the stable local range; capped to ${input.referenceStrength}/${input.coverNoiseStrength} for this run.`);
   }
   if (input.candidates > 1 && input.aceSeed >= 0) {
     addEvent(run, 'warning', 'Fixed seed with multiple candidates can repeat candidates; use seed -1 for varied candidates.');
@@ -595,6 +614,7 @@ function collectFiles(run) {
     exportsDir: fs.existsSync(exportsDir) ? exportsDir : null,
     candidates,
     manifest: exists(path.join(exportsDir, 'candidate-manifest.json')),
+    candidateAssetsManifest: exists(path.join(run.input.outputDir, 'ace-candidate-assets', 'candidate-assets-manifest.json')),
     geminiBrief: exists(path.join(run.input.outputDir, 'gemini-ace-brief.json')),
     preflight: exists(path.join(exportsDir, 'ace-preflight.json')),
     referenceSection: exists(path.join(exportsDir, 'reference-section.wav')),
@@ -751,6 +771,47 @@ function shellish(value) {
   return /[\s"']/g.test(text) ? JSON.stringify(text) : text;
 }
 
+function audioInfo(filePath) {
+  return new Promise((resolve, reject) => {
+    const resolved = path.resolve(String(filePath || ''));
+    if (!path.isAbsolute(resolved) || !fs.existsSync(resolved)) {
+      reject(new Error('Audio file does not exist or is not absolute.'));
+      return;
+    }
+    const ffprobe = process.env.PROMPT2MIDI_FFPROBE || 'ffprobe';
+    const child = spawn(ffprobe, [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=nokey=1:noprint_wrappers=1',
+      resolved,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `ffprobe exited with code ${code}`));
+        return;
+      }
+      const durationSeconds = Number.parseFloat(stdout.trim());
+      if (!Number.isFinite(durationSeconds)) {
+        reject(new Error('Could not read audio duration.'));
+        return;
+      }
+      resolve({
+        path: resolved,
+        name: path.basename(resolved),
+        durationSeconds,
+      });
+    });
+  });
+}
+
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
@@ -854,6 +915,11 @@ function createApp() {
       }
       if (req.method === 'POST' && url.pathname === '/api/pick-folder') {
         sendJson(res, 200, { path: await pickPath('folder') });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/api/audio-info') {
+        const body = await readBody(req);
+        sendJson(res, 200, await audioInfo(body.path));
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/runs') {
@@ -1295,7 +1361,7 @@ function html() {
       <input id="autoStopAce" type="checkbox" checked>
       <span>Stop UI-managed generator when this tab closes</span>
     </label>
-    <p class="hint" id="modeHint">Full-track mode renders one continuous generated proxy at the reference duration. It skips section stitching and can take several minutes per candidate.</p>
+    <p class="hint" id="modeHint">Full-track mode renders one continuous generated proxy up to this computer/model limit. It skips section stitching and can take several minutes per candidate.</p>
   </div>
 </main>
 
@@ -1489,8 +1555,8 @@ function syncRenderMode() {
   referenceStart.disabled = fullTrack;
   if (fullTrack) {
     duration.value = '';
-    duration.placeholder = 'full reference';
-    document.getElementById('modeHint').textContent = 'Full-track mode renders one continuous generated proxy at the reference duration. It skips section stitching and can take several minutes per candidate.';
+    duration.placeholder = 'full reference up to limit';
+    document.getElementById('modeHint').textContent = 'Full-track mode renders one continuous generated proxy up to this computer/model limit. It skips section stitching and can take several minutes per candidate.';
     document.getElementById('run').textContent = 'Generate Full Track';
   } else {
     if (!duration.value) duration.value = '30';

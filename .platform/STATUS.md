@@ -1,10 +1,12 @@
 # prompt2midi — Current Status
 
-Last updated: 2026-05-06
+Last updated: 2026-05-25
 
 prompt2midi is an open-source, local-first AI co-producer for producers and artists. It can be used as a DAW inspiration starter for Ableton/Logic/other DAWs, or as a pre-SUNO tool for turning a reference-inspired idea into a cleaner prompt, structure guide, MIDI package, and optional proxy material.
 
 `develop` is the default branch for daily work. `main` is release-only and should receive merges from `develop` when creating version tags.
+
+Product north star: see `.platform/product-vision.md` for the current reference-track-to-full-demo-to-stems/MIDI/Suno package vision. Generation experiments and reproducible settings are tracked in `.platform/memory/generation-run-log.md`. Music generation taste rules live in `.platform/conventions/music-generation-style.md` and should be followed by all LLM providers.
 
 ## Feature Areas
 
@@ -13,7 +15,7 @@ prompt2midi is an open-source, local-first AI co-producer for producers and arti
 | JUCE plugin client | 🔵 Exists | 2026-05-06 | WAV/MP3 selection, prompt entry, job polling, result display, copy prompt. Full AU/VST integration and host QA are next production work. |
 | Local Node backend | 🔵 Exists | 2026-05-06 | Localhost API with `/health`, `/analyze`, `/status`, `/result`, job state, MP3 decode, Python bridge, aggregation. |
 | Python analysis engine | 🔵 Exists | 2026-05-06 | Structured BPM/key/energy/loudness/spectral/genre/chord/drum/structure outputs. Optional engines improve results but must fail soft. |
-| Stem splitting / MIDI mapping | ⚠ Flagged | 2026-05-06 | Useful evidence path, but still weak. Needs better source-aware cleanup, note ownership, quantization, register selection, and confidence labeling. |
+| Stem splitting / MIDI mapping | ⧗ In progress | 2026-05-06 | Phase 1 now maps generated ACE output to detected stem roles with confidence/limitations and no fake MIDI. Next: repair/recombination QA and role-specific transcription. |
 | Composition package | 🔵 Exists | 2026-05-06 | Generates original bass/drums/chords/melody/full_loop MIDI, summary, and prompt package. |
 | Full Arrangement / proxy flow | 🔵 Exists | 2026-05-06 | Arrangement Lock, structure maps, guide MIDI, SUNO proxy package, optional ACE/local audio candidates. |
 | Gemini SUNO prompt | ⚠ Blocked | 2026-05-06 | Code exists, but real `GEMINI_API_KEY` + WAV smoke test is still required before closure. |
@@ -24,7 +26,7 @@ prompt2midi is an open-source, local-first AI co-producer for producers and arti
 ## Immediate Priorities
 
 1. **Release v1.0.0 baseline** — merge `develop` to `main` and tag once docs/platform refresh is committed.
-2. **Improve stem/MIDI quality** — source-aware mapping, cleanup, quantization, register choice, confidence labels.
+2. **Improve stem/MIDI quality** — repair/recombination QA, source-aware transcription, cleanup, quantization, register choice, confidence labels.
 3. **Complete JUCE AU/VST integration** — reliable plugin build/install, Ableton host QA, import/export ergonomics.
 4. **Unblock Gemini SUNO prompt stream** — run a real-key smoke test and verify `exports/prompt.txt` is Gemini-generated.
 
@@ -41,6 +43,7 @@ prompt2midi is an open-source, local-first AI co-producer for producers and arti
 ## Known Gotchas
 
 - Stem splitting and MIDI mapping are not production-grade yet; treat extracted MIDI as editable evidence.
+- Music generation defaults are not generic electronic music. Keep prompts/settings inside underground house, minimal/deep tech-house, and underground techno-adjacent lanes; avoid EDM/trance/big-room/dubstep/festival language unless the owner explicitly asks.
 - JUCE must remain the client/UI layer; do not put long-running work in `processBlock`.
 - Optional cloud/model engines must not be required for the core workflow.
 - `develop` is the default branch for feature work; `main` is for releases and tags.

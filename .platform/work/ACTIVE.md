@@ -5,6 +5,7 @@
 
 | Stream | Type | Status | Agent | Last updated |
 |---|---|---|---|---|
+| stems-splitting-midi-mapping | feature | in-progress | codex | 2026-05-06 |
 | gemini-suno-prompt-v1 | feature | blocked | claude-code | 2026-05-05 |
 
 ---
