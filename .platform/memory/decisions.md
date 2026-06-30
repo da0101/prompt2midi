@@ -1,6 +1,6 @@
 # prompt2midi — Decision Log
 
-Last updated: 2026-05-06
+Last updated: 2026-06-30
 
 > **Purpose:** capture the _why_ behind architectural, product, and tooling decisions so future AI sessions and developers don't have to re-derive them (or undo them).
 
@@ -35,6 +35,7 @@ Each decision is one row. **Locked** decisions are final until a new decision su
 | 14 | 2026-05-06 | ACE output as stem/MIDI source | Split and map generated ACE output for reusable stems and MIDI; do not derive reusable music assets from the original reference track. | ACE output is the material the user can reuse legally, while reference audio is only inspiration/evidence. | Splitting the copyrighted reference into reusable stems; treating reference transcription as final material. |
 | 15 | 2026-05-06 | Dynamic stem roles | Detect instrument/stem roles from the generated audio and emit only justified stems/MIDI files. | Generated tracks may contain only drums+pads, bass+guitar, or other combinations, so a fixed stem list would create fake assets. | Hardcoding bass/drums/chords/melody for every output; emitting empty or misleading MIDI files for absent roles. |
 | 16 | 2026-05-27 | DJ Arrangement Expander | Build a deterministic arrangement maker that expands good ACE/Suno stems into a 5-7 minute underground house arrangement by reusing existing audio/stems instead of asking Suno to compose the second half. | Suno can generate high-quality 3-minute material but repeatedly drifts, adds new sounds, or creates artifacts when asked to extend exact underground-house arrangements. House/techno arrangement is largely phrase-based reuse, muting, filtering, and layering, which the local pipeline can do reliably. | Relying on Suno Extend/Studio generate-in-place for exact continuation; asking long lyrics/prompts to force duration; generating new matching FX. |
+| 17 | 2026-06-30 | ACE-Step single-render duration ceiling | Hard-cap single ACE-Step render requests at 370s (6:10) in `analysis/analyze.py::_reference_sample_duration` (`ACE_STEP_MAX_DURATION_SECONDS`), applied regardless of source track length or hardware-tier env overrides. | ACE-Step cannot reliably render past ~6:10. The existing hardware-tier cap (`PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION`, set by `scripts/dev/ace-proxy-ui.js`) only applied to the Vue UI path; CLI runs (`npm run reference -- --duration full`) had no cap at all and would request the full source-track length. | Leaving the cap UI-only and undocumented; raising the per-section full-arrangement cap too (each stitched section is already short, so it isn't at risk). |
 
 ---
 

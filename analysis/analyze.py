@@ -507,11 +507,16 @@ def _number_or_none(value) -> float | None:
         return None
 
 
+# ACE-Step cannot reliably render past ~6:10; requests above this are clamped
+# regardless of source track length or hardware-tier env overrides.
+ACE_STEP_MAX_DURATION_SECONDS = 370.0
+
+
 def _reference_sample_duration(analysis: dict) -> float:
     configured = str(os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_DURATION") or "").strip().lower()
     source_duration = max(1.0, _number_or_none((analysis or {}).get("duration_seconds")) or 30.0)
     max_duration = _number_or_none(os.environ.get("PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION"))
-    cap = max(10.0, max_duration) if max_duration else source_duration
+    cap = min(max(10.0, max_duration) if max_duration else source_duration, ACE_STEP_MAX_DURATION_SECONDS)
     if configured in {"", "sample", "loop", "30", "30s"}:
         return min(30.0, cap)
     if configured in {"full", "reference", "track", "source"}:

@@ -503,6 +503,7 @@ Options:
   --instrumental                Force instrumental ACE output even when the reference has vocals.
   --candidates <n>              ACE candidate count. Defaults to 4 normal candidates; max 6.
   --duration <seconds|full>     Generated candidate length. Defaults to 30 seconds; use full/reference for source length.
+                               ACE-Step cannot reliably render past ~6:10 (370s); longer requests are clamped to that ceiling.
   --sample-duration <value>     Alias for --duration.
   --reference-conditioning-duration <seconds>
                                Use a shorter/longer source-conditioning window than the generated candidate length.
