@@ -5,7 +5,7 @@ status: active
 repo_ids: [prompt2midi]
 related_domain_slugs: [local-orchestration, llm-midi-generation, juce-plugin]
 created_at: 2026-04-28
-updated_at: 2026-05-06
+updated_at: 2026-06-30
 ---
 
 # audio-analysis
@@ -34,6 +34,7 @@ This domain covers the Python audio intelligence engine: extracting musical fact
 - All-In-One-Fix can run in an optional Docker worker for the fragile NATTEN/torch structure model path. Enable it with `PROMPT2MIDI_ENABLE_ALLIN1_DOCKER=1` or `--allin1-docker`; it is bounded by `PROMPT2MIDI_ALLIN1_DOCKER_TIMEOUT_SECONDS` (default 300s) and falls back to the internal librosa/heuristic arrangement analyzer on timeout or failure.
 - The Docker worker reuses precomputed stems from `<output_dir>/stems` when present, so Docker does not rerun local Demucs separation unless no stems are available.
 - Python should return structured JSON only; interpretation/prose belongs to Node/LLM.
+- ACE-Step cannot reliably render a single generation past ~6:10 (370 seconds). `_reference_sample_duration` in `analysis/analyze.py` enforces `ACE_STEP_MAX_DURATION_SECONDS = 370.0` as a hard ceiling on every single-render request (`--duration`/`--sample-duration`, including `full`/`reference`), independent of source track length or the UI's hardware-tier `PROMPT2MIDI_REFERENCE_SAMPLE_MAX_DURATION` override. Full-arrangement section-by-section rendering (`analysis/generation/full_guide_audio.py`) is not affected since each stitched section is already short.
 
 ## Frontend / clients
 

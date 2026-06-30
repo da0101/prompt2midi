@@ -64,6 +64,19 @@ If `trivial × low`, exit this skill and execute directly. Otherwise continue.
 
 Exit condition: domain file exists + stream file exists + `ACTIVE.md` row added + `BRIEF.md` updated. Only then proceed.
 
+### Stage 1c — Worktree + local environment prep (mandatory before implementation)
+
+Before implementation starts on any feature, bugfix, or hotfix stream:
+
+1. Create or enter a separate Git worktree for every touched repo.
+2. Use `feature/<slug>` or `bugfix/<slug>` from `develop`.
+3. Use `hotfix/<slug>` from `master` only when the user explicitly says this is a hotfix.
+4. Install each repo's development dependencies in that worktree using the repo's lockfile/toolchain.
+5. Identify the local dev command and localhost port(s) for each touched repo.
+6. Record worktree path, branch, base, dependency status, dev command, and port(s) in the stream file under `## Worktree / Local environment`.
+
+If the worktree or dependency install cannot be completed, stop and surface the blocker before coding. Do not implement feature/bugfix/hotfix work in the shared main checkout.
+
 ### Stage 2 — Interview (only if ambiguous)
 
 Ask **2–5 targeted questions** via the agent CLI's question mechanism (`AskUserQuestion` in Claude Code, equivalent in others). Rules:
@@ -87,6 +100,7 @@ State a 5–10 bullet plan **inline in chat**. Include:
 - **Files to touch** (list with short why)
 - **New / deleted files** (list)
 - **Development phases** (ordered implementation chunks)
+- **Worktree/local environment plan** (repos, worktree paths, dependency install command, dev command, localhost ports)
 - **Complexity assessment** (why the task is small/medium/large)
 - **Test plan** (what you'll run to prove it works)
 - **Risk factors** (what could go wrong, for medium+/high risk)
@@ -101,7 +115,7 @@ Wait for user approval before implementing any new stream. If user pushes back, 
 
 ### Stage 5 — Execute
 
-Write the code. Rules:
+Write the code from the prepared worktree path(s). Rules:
 - Atomic commits per logical chunk (don't pile 10 changes into 1 commit)
 - Max ~300 lines per file — extract before hitting the limit
 - Read before you edit (every time — no exceptions)
@@ -118,6 +132,73 @@ Parallelize verification. Fire in one round:
 
 If any check fails, loop back to Stage 5.
 
+Before the final response, create or update a durable **Manual QA artifact** whenever the task needs human click-through, app-driving, behavior verification, bug reproduction, acceptance testing, release verification, API behavior validation, or visual review. The default path is `.platform/work/qa/<stream-slug>-manual-qa.md`.
+
+The Manual QA artifact is a hard gate before commit, push, merge, release, or stream closure. If manual QA is not relevant, record `Manual QA: not required — <specific reason>` in the stream file and mention that reason in the final response.
+
+If the agent drove the app with Maestro, Browser, Playwright, MCP, or another
+interactive tool, also create a **QA Execution Journal** at
+`.platform/work/qa/<stream-slug>-execution-journal.md`. The Manual QA artifact
+records what should be tested; the execution journal records what the agent
+actually did, observed, fixed, retested, skipped, and escalated.
+
+Manual QA artifact format:
+```
+## 🧪 Manual QA Artifact
+
+🎯 Scope: <feature / bug / behavior being validated>
+🧰 Environment: <local/staging/prod, URL, branch/build, browser/device, flags>
+🔑 Test data: <accounts, roles, fixtures, records, permissions>
+🛡️ Safety limits: <forbidden actions, rate/API caps, destructive-data rules>
+
+✅ Happy path
+1. <exact action: where to click/type/navigate> → Expected: <observable result>
+2. <exact action: where to click/type/navigate> → Expected: <observable result>
+
+🐛 Bug repro / regression
+1. <original failing behavior or regression path> → Expected: <fixed behavior>
+
+⚠️ Edge cases
+- <case> → Expected: <result>
+- <case> → Expected: <result>
+
+📱 Browser/device checks: <only when relevant>
+♿ Accessibility checks: <keyboard, focus, labels, contrast when relevant>
+🧾 Evidence to capture: <screenshots, logs, IDs, pass/fail notes>
+🤖 Maestro / automation notes: <stable selectors, flow boundaries, caps, artifacts>
+✅ Signoff: <tester, date, PASS/FAIL/BLOCKED, remaining risk>
+```
+
+QA execution journal format:
+```
+## 🧾 QA Execution Journal
+
+Scope:
+Environment:
+Driver/tooling: <Maestro MCP/CLI, Browser, Playwright, app runner, API client>
+Manual QA artifact followed: <path>
+Safety limits:
+
+### Timeline
+| # | Time | Tool | Action | Observation | Expected | Actual | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| 1 | <time> | <tool> | <opened app / clicked / typed / inspected / ran command> | <what the agent saw> | <expected> | <actual> | PASS/FAIL/BLOCKED/SKIPPED | <screenshot/log/report/ref> |
+
+### Bugs, fixes, and retests
+| Bug / behavior | Evidence | Diagnosis | Fix or escalation | Retest | Outcome |
+|---|---|---|---|---|---|
+| <issue or "None"> | <ref> | <cause or suspected layer> | <files changed / human asked / deferred> | <step rerun> | <PASS/FAIL/BLOCKED> |
+
+### Successful paths
+- <flow that passed> — evidence: <ref>
+
+### Human requests / blockers
+- <missing credential/file/decision or "None">
+
+### Remaining risk
+- <risk or "None known">
+```
+
 Once all checks pass, append **one line** to `.platform/memory/log.md`:
 ```
 YYYY-MM-DD — <task> — <outcome> — <takeaway>
@@ -127,13 +208,16 @@ One sentence of takeaway. Not a paragraph. Not a retrospective.
 
 ## Hard rules (non-negotiable)
 
-1. **No `.md` artifacts for plans.** Ever. Plans live in chat.
+1. **No `.md` artifacts for plans.** Plans live in chat. Stream files, `.platform/work/qa/<stream-slug>-manual-qa.md` QA artifacts, and `.platform/work/qa/<stream-slug>-execution-journal.md` execution journals are required operational state, not plan documents.
 2. **Read before you edit.** No exceptions.
 3. **Parallelize subagents.** Never run independent subagents sequentially.
 4. **Trivial non-stream tasks skip Stages 2–4. New streams still get scaled research and human approval.**
 5. **Every success logs one line** to `.platform/memory/log.md`.
 6. **New streams and high-risk tasks require explicit user approval** between Stage 4 and Stage 5.
 7. **Max ~300 lines per file.**
+8. **Manual QA artifact required when human verification matters.** Otherwise record why manual QA is not required in the stream file. Interactive LLM-driven QA also requires a QA Execution Journal.
+9. **Feature, bugfix, and hotfix implementation happens in isolated worktrees.** Dependencies and localhost ports are identified before coding.
+10. **Workflow script self-audit — mandatory before every `Workflow()` call.** Before submitting any workflow script, scan every `agent(` call in the script and verify it has an explicit `model:` parameter. Fix any that are missing before calling `Workflow()`. No exceptions — omitting `model` makes every agent inherit the caller's tier, turning a 10-agent fan-out into a 10× token burn for no quality gain. Rule of thumb: research/audit/review/test-writing → `"sonnet"` · implementation/architecture → `"opus"` · trivial mechanical transforms → `"haiku"`.
 
 ## Output format
 
@@ -145,7 +229,7 @@ Progress markers in chat at each stage transition:
   1. …
   2. …
 [Stage 5] Executing…
-[Stage 6] Verified. Logged.
+[Stage 6] Verified. Logged. Manual QA artifact: <path | not required + reason>; QA execution journal: <path | not interactive + reason>
 ```
 
 One line per marker. No prose fluff between them.
@@ -172,3 +256,4 @@ One line per marker. No prose fluff between them.
 3. **Writing the plan to `PLAN.md`.** No. Chat only.
 4. **Running tests AFTER committing.** Tests pass before the commit, not after.
 5. **Logging more than one line per task.** One line. Rolling history.
+6. **Submitting a workflow script with bare `agent()` calls.** `agent("do X")` with no `model:` is a token bomb — it inherits Opus from the caller and multiplies it by every agent in the fan-out. Always write `agent("do X", { model: "sonnet" })`. The self-audit in rule #10 catches these before they fire.
