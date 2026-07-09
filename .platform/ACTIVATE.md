@@ -72,6 +72,25 @@ Based on scan + interview, generate these files. Write them one at a time, then 
 
 **`.platform/memory/log.md`** — append one line: `{{TODAY}} — ab activation — .platform/ pack filled from scan + interview — <one-sentence summary of what you learned>`
 
+## Step 3b — Knowledge graph (optional)
+
+If `graphify --version` returns a version number, build the structural knowledge graph now
+(AST-only — no API key, no LLM, free):
+
+```bash
+graphify update . --force --no-cluster
+mkdir -p .platform/graphify
+cp -R graphify-out/. .platform/graphify/ && rm -rf graphify-out
+```
+
+This writes `.platform/graphify/graph.json` — a structural map of the codebase (god nodes,
+import cycles, cross-cutting connections). Reference it during `ab-research` to understand
+what calls what without grepping individual files. No GRAPH_REPORT.md is generated in
+AST-only mode; agents query graph.json directly.
+
+If graphify is not installed, suggest: `uv tool install graphifyy && graphify install`
+then skip this step.
+
 ## Step 4 — Install or update the root `CLAUDE.md` **(never delete existing content)**
 
 Check whether `CLAUDE.md` already exists at the project root.
@@ -147,19 +166,19 @@ The same idempotency contract from Step 4 applies: every Agentboard section you 
 
 Run:
 ```bash
-./.platform/scripts/sync-context.sh --apply
+ab sync --apply
 ```
 
 This generates them from the new `CLAUDE.md` so Codex CLI and Gemini CLI get the same entry point. The markers are carried over from `CLAUDE.md`.
 
 ### Case B — One or both exist, with NO Agentboard markers
 
-**Do not run `sync-context.sh --apply` blindly — it will overwrite them.** Instead, for each existing file:
+**Do not run `ab sync --apply` blindly — it will overwrite them.** Instead, for each existing file:
 
 1. Read the user's existing file in full.
 2. Take the ab section you wrote between the markers in `CLAUDE.md` in Step 4.
 3. Prepend that same section — with the begin/end markers — to the user's existing file, followed by `\n\n---\n\n## Existing AGENTS.md content (preserved by ab activation on {{TODAY}})\n\n` and the original content.
-4. Manually write the result — do **not** use `sync-context.sh --apply` because it clobbers rather than prepends.
+4. Manually write the result — do **not** use `ab sync --apply` because it clobbers rather than prepends.
 
 ### Case C — Re-activation: an entry file already contains Agentboard markers
 
@@ -176,6 +195,20 @@ ab doctor
 ```
 
 `doctor` re-checks the frontmatter on every stream and domain file you wrote, validates the cross-references in `work/ACTIVE.md` and `work/BRIEF.md`, and (in hub mode) verifies every row of `repos.md` resolves to a real path. **If `doctor` reports `errors > 0`, fix them before showing the summary** — silent missing keys are exactly what this gate exists to prevent.
+
+**Memory persistence hook (opt-in, Claude Code only).** The `Stop` hook in `.claude/settings.json` wires `memory-persist.sh` to fire after every agent turn. It appends a one-line breadcrumb to `.platform/memory/log.md` and creates `.platform/memory/session-YYYYMMDD.md` with files changed and a placeholder for learnings. The entry is already present in the template `settings.json` — it takes effect as soon as `ab install-hooks` copies that file into `.claude/settings.json`. If the user already has a custom `settings.json`, show them the manual snippet:
+
+```json
+"Stop": [{
+  "hooks": [{
+    "type": "command",
+    "command": "bash -c 'ROOT=$(git rev-parse --show-toplevel 2>/dev/null); [ -n \"$ROOT\" ] && [ -f \"$ROOT/.platform/scripts/hooks/memory-persist.sh\" ] && { cd \"$ROOT\" && bash \".platform/scripts/hooks/memory-persist.sh\"; } || exit 0'",
+    "timeout": 10
+  }]
+}]
+```
+
+To disable: remove the `Stop` block from `.claude/settings.json` or delete `.platform/scripts/hooks/memory-persist.sh`.
 
 If the user works with **Codex CLI or Gemini CLI** (in addition to or instead of Claude Code), also run:
 
@@ -225,8 +258,11 @@ These live in `.claude/skills/` (Claude Code auto-loads them). They are additive
 | `ab-test-writer` | Writes comprehensive unit tests with edge-case enumeration by feature type. |
 | `ab-security` | Security audit against OWASP checklist. Required for auth/payment/tenant-data changes. |
 | `ab-qa` | Real-browser / manual QA pass with reproducible repro steps. Required for UI changes. |
+| `ab-qa-self-heal` | Agent-driven app QA and bounded self-healing with Maestro, browser automation, project test runners, capped limit probes, report ingestion, focused fixes, and reruns. |
 | `ab-review` | Pre-PR code review across spec / quality / security / tests. |
 | `ab-debug` | Root-cause bug investigation. Hypothesis-test-narrow loop. |
+| `ab-cleanup` | Deep cleanup for a codebase, feature, path, file, or function. Scans first, batches safe changes, preserves behavior. |
+| `ab-graphify` | Build or refresh the codebase knowledge graph. Query `.platform/graphify/graph.json` during research. |
 
 Read each skill's `SKILL.md` on first use to understand its protocol. The skills enforce the same workflow this kit documents, so they compose naturally with `ab-workflow`.
 
@@ -236,8 +272,11 @@ These files are generic and ship verbatim — you don't need to rewrite them:
 
 - **`.platform/workflow.md`** — the 6-stage inline workflow (triage → interview → research → propose → execute → verify)
 - **`.platform/ONBOARDING.md`** — the 7-step onboarding path for future sessions
+- **`.platform/roles/`** — the role-profile pack (`INDEX.md` routing table + one file per role). Ships verbatim — do **not** edit the shipped role files or the INDEX activation rule. During activation you **may add** project-specific roles: create a new `.platform/roles/<slug>.md` following the structure of any shipped role, and add a matching row to the INDEX routing table.
 - **`.platform/scripts/sync-context.sh`** — the sync script
 - **`.platform/templates/repo/*`** — scaffolding for adding new repos later via `ab add-repo`
+
+  A note on these repo templates: their placeholders (`{{REPO_NAME}}`, `{{TECH_STACK_LINE}}`, …) are **not** filled during activation or by `ab init`. When the user later runs `ab add-repo <path>`, the CLI copies the templates verbatim into the new repo with placeholders intact — it is then the LLM's job to fill them by scanning that repo (the user typically says "onboard this new repo into the platform"). The full placeholder table and runbook live in `.platform/templates/repo/ADDING-A-REPO.md`.
 - **`.platform/work/BRIEF.md`** — feature brief (read FIRST every session — narrative context for current active feature)
 - **`.platform/work/ACTIVE.md`** — active workstream registry (read every session start, after BRIEF.md)
 - **`.platform/work/TEMPLATE.md`** — skeleton for new workstreams; copy to `work/<slug>.md` when starting work
