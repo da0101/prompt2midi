@@ -194,7 +194,7 @@ describe('prompt2midi local API', () => {
       }
       assert.equal(comp.audio.status, 'disabled');
       assert.equal(comp.audio.sample, null);
-      assert.equal(comp.audio.duration_seconds, 30);
+      assert.equal(comp.audio.duration_seconds, 4);
       assert.ok(['musicgen_melody', 'audio_generation'].includes(comp.audio.provider));
       assert.ok(result.body.result.suno_prompt && result.body.result.suno_prompt.text.length > 0);
       assert.ok(result.body.result.export_dir);

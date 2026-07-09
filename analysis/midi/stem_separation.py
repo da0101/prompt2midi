@@ -9,13 +9,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+KNOWN_DEMUCS_STEMS = ("bass", "drums", "other", "vocals", "guitar", "piano")
 
-def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
+
+def separate_for_transcription(audio_path: str, output_dir: str, source_stage: str = "analysis_input") -> dict:
     if os.environ.get("PROMPT2MIDI_DISABLE_STEMS") == "1":
         _progress("stem separation: disabled by environment")
         return {
             "available": False,
             "method": "disabled",
+            "source_audio": os.path.abspath(audio_path),
+            "source_stage": source_stage,
             "stems": {},
             "warnings": ["Stem separation disabled by PROMPT2MIDI_DISABLE_STEMS."],
         }
@@ -25,7 +29,9 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
         _progress("stem separation: Demucs not installed")
         return {
             "available": False,
-            "method": "demucs_htdemucs",
+            "method": _method_name(),
+            "source_audio": os.path.abspath(audio_path),
+            "source_stage": source_stage,
             "stems": {},
             "warnings": ["Stem separation engine not installed. Run npm run setup:stems."],
         }
@@ -38,8 +44,9 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
 
     timeout = _timeout_seconds()
     stem_mode = os.environ.get("PROMPT2MIDI_STEM_MODE") or "full"
-    _progress(f"stem separation: running Demucs htdemucs {stem_mode} split")
-    command = [engine, "-n", "htdemucs", "-o", str(demucs_root), audio_path]
+    model = _demucs_model()
+    _progress(f"stem separation: running Demucs {model} {stem_mode} split")
+    command = [engine, "-n", model, "-o", str(demucs_root), audio_path]
     if stem_mode == "bass":
         command.insert(1, "--two-stems=bass")
     env = os.environ.copy()
@@ -62,7 +69,9 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
         _progress("stem separation: Demucs timed out")
         return {
             "available": False,
-            "method": "demucs_htdemucs",
+            "method": _method_name(model),
+            "source_audio": os.path.abspath(audio_path),
+            "source_stage": source_stage,
             "stems": {},
             "warnings": [f"Stem separation timed out after {timeout} seconds."],
         }
@@ -71,35 +80,44 @@ def separate_for_transcription(audio_path: str, output_dir: str) -> dict:
         _progress("stem separation: Demucs failed")
         return {
             "available": False,
-            "method": "demucs_htdemucs",
+            "method": _method_name(model),
+            "source_audio": os.path.abspath(audio_path),
+            "source_stage": source_stage,
             "stems": {},
             "warnings": ["Stem separation failed: " + _last_error(completed.stderr or completed.stdout)],
         }
 
     stems = {}
-    for name in ("bass", "drums", "other", "vocals"):
+    for name in KNOWN_DEMUCS_STEMS:
         source = _find_stem(demucs_root, f"{name}.wav")
         if source is not None:
             stable = stable_root / f"{name}.wav"
             shutil.copyfile(source, stable)
             stems[name] = os.path.abspath(stable)
 
-    if "bass" not in stems:
-        _progress("stem separation: Demucs finished but bass.wav is missing")
+    if not stems:
+        _progress("stem separation: Demucs finished but no recognized stems were found")
         return {
             "available": False,
-            "method": "demucs_htdemucs",
+            "method": _method_name(model),
+            "source_audio": os.path.abspath(audio_path),
+            "source_stage": source_stage,
             "stems": {},
-            "warnings": ["Stem separation completed but did not produce bass.wav."],
+            "warnings": ["Stem separation completed but did not produce recognized stem files."],
         }
 
     _progress(f"stem separation: produced stems {', '.join(sorted(stems))}")
+    if os.environ.get("PROMPT2MIDI_KEEP_DEMUCS_RAW") != "1":
+        shutil.rmtree(demucs_root, ignore_errors=True)
+        shutil.rmtree(output_path / "demucs-runtime", ignore_errors=True)
     return {
         "available": True,
-        "method": "demucs_htdemucs",
+        "method": _method_name(model),
+        "source_audio": os.path.abspath(audio_path),
+        "source_stage": source_stage,
         "stems": stems,
         "warnings": [
-            "Stems are source-separated by Demucs and can still contain bleed between bass, drums, vocals, and other instruments."
+            "Stems are source-separated by Demucs and can still contain bleed, artifacts, or missing energy between instruments."
         ],
     }
 
@@ -125,6 +143,14 @@ def _timeout_seconds() -> int:
         return max(30, int(configured))
     except ValueError:
         return 360
+
+
+def _demucs_model() -> str:
+    return os.environ.get("PROMPT2MIDI_DEMUCS_MODEL") or os.environ.get("PROMPT2MIDI_STEM_MODEL") or "htdemucs"
+
+
+def _method_name(model: str | None = None) -> str:
+    return f"demucs_{model or _demucs_model()}"
 
 
 def _find_stem(directory: Path, filename: str) -> str | None:

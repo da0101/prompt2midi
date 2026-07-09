@@ -1,0 +1,20 @@
+diff --git a/acestep/core/generation/handler/init_service_orchestrator.py b/acestep/core/generation/handler/init_service_orchestrator.py
+index 4b03224..835bbfe 100644
+--- a/acestep/core/generation/handler/init_service_orchestrator.py
++++ b/acestep/core/generation/handler/init_service_orchestrator.py
+@@ -71,6 +71,15 @@ class InitServiceOrchestratorMixin:
+                     "[initialize_service] config_path not set; defaulting to 'acestep-v15-turbo'."
+                 )
+ 
++            env_use_mlx_dit = os.environ.get("ACESTEP_USE_MLX_DIT")
++            if env_use_mlx_dit is not None:
++                use_mlx_dit = env_use_mlx_dit.strip().lower() not in {"0", "false", "no", "off"}
++                logger.info(
++                    "[initialize_service] ACESTEP_USE_MLX_DIT=%r -> use_mlx_dit=%s",
++                    env_use_mlx_dit,
++                    use_mlx_dit,
++                )
++
+             resolved_device = self._resolve_initialize_device(device)
+             self.device = resolved_device
+             self.offload_to_cpu = offload_to_cpu

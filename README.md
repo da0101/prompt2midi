@@ -376,6 +376,8 @@ Start ACE-Step when using local sample generation:
 npm run ace-step:start
 ```
 
+For reference-calibrated underground house generation, use the documented PyTorch/MPS ACE mode and settings ladder in `docs/pipelines/ace-step-reference-calibration.md`. Successful ACE/Suno recipes are tracked in `docs/pipelines/successful-generation-configs.md`.
+
 Useful environment flags:
 
 ```bash

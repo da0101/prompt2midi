@@ -10,6 +10,7 @@ from pathlib import Path
 
 from analysis.core.audio_quality import score_audio_candidate
 from analysis.generation.providers.ace_step_generation import generate_with_ace_step
+from analysis.reference.key_intent import requested_target_key
 from analysis.reference.reference_groove import analyze_reference_groove
 from analysis.reference.reference_selection import prepare_reference_section
 
@@ -23,6 +24,7 @@ def generate_reference_sample(
     prompt: str,
     analysis: dict | None = None,
     duration_seconds: float = DEFAULT_DURATION_SECONDS,
+    reference_conditioning_duration_seconds: float | None = None,
 ) -> dict:
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     if not _has_enabled_provider():
@@ -44,7 +46,7 @@ def generate_reference_sample(
     section = prepare_reference_section(
         reference_audio,
         output_dir,
-        duration_seconds=duration_seconds,
+        duration_seconds=reference_conditioning_duration_seconds or duration_seconds,
         strategy=_reference_section_strategy(transform),
     )
     reference_groove = analyze_reference_groove(
@@ -283,24 +285,42 @@ def _control_scaffold_direction() -> str:
 
 
 def _condition_prompt(prompt: str, reference_groove: dict, reference_transform: dict | None = None) -> str:
+    if os.environ.get("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC") == "1":
+        user = " ".join((prompt or "").replace("\n", " ").split()).strip()
+        base = (
+            "diagnostic source reconstruction: use the attached source audio as the blueprint; "
+            "match the source timing, groove, arrangement, instruments, bass, drums, effects, timbre, dynamics, and mix character as closely as possible"
+        )
+        if user:
+            base = f"{base}; {user}"
+        return _sentence_limited(base, 900)
+
     parts = []
     bass_lock = _bass_lock_direction(reference_transform or {})
     if bass_lock:
         parts.append(bass_lock)
     harmonic = _harmonic_transform(reference_transform or {})
+    target_key = requested_target_key(prompt)
+    if target_key:
+        harmonic = {"key": target_key, "strict_scale": True, "target_key_override": True}
     harmonic_prompt = _harmonic_direction(harmonic).strip()
     if harmonic_prompt:
         parts.append(harmonic_prompt)
-    base = _model_prompt_for_transform(prompt, reference_transform or {})
+    if target_key:
+        parts.append(
+            f"target key override: use requested target key area {target_key} for bassline, chord roots, stabs, hooks, fills, and risers; "
+            "keep the reference ambience and groove, not the reference pitch center"
+        )
+    base = _model_prompt_for_transform(prompt, reference_transform or {}, target_key=target_key)
     if base:
         parts.append(base)
-    groove_prompt = _groove_prompt_for_transform(reference_groove or {}, reference_transform or {})
+    groove_prompt = _groove_prompt_for_transform(reference_groove or {}, reference_transform or {}, target_key=target_key)
     if groove_prompt:
         parts.append(groove_prompt)
     character_prompt = _reference_character_prompt(reference_transform or {})
     if character_prompt:
         parts.append(character_prompt)
-    transform_prompt = _compact_transform_prompt(reference_transform or {})
+    transform_prompt = _compact_transform_prompt(reference_transform or {}, target_key=target_key)
     if transform_prompt:
         parts.append(transform_prompt)
     style_brief = (reference_transform or {}).get("style_brief") or "the detected reference style"
@@ -330,7 +350,7 @@ def _condition_prompt(prompt: str, reference_groove: dict, reference_transform: 
     return _sentence_limited(". ".join(parts), 900)
 
 
-def _compact_transform_prompt(reference_transform: dict) -> str:
+def _compact_transform_prompt(reference_transform: dict, target_key: str | None = None) -> str:
     if not reference_transform:
         return ""
     bass = reference_transform.get("bass") or {}
@@ -347,13 +367,17 @@ def _compact_transform_prompt(reference_transform: dict) -> str:
     elif similarity < 0.75:
         controls = [
             profile.get("label") or "reference-inspired original",
-            "same tempo, key area, groove pocket, and mood",
+            f"same tempo, target key area {target_key}, groove pocket, and mood"
+            if target_key
+            else "same tempo, key area, groove pocket, and mood",
             "noticeably new bass notes and secondary percussion",
         ]
     else:
         controls = [
             profile.get("label") or "strong reference groove anchor",
-            "same tempo, key area, timing pocket, and energy",
+            f"same tempo, target key area {target_key}, timing pocket, and energy"
+            if target_key
+            else "same tempo, key area, timing pocket, and energy",
             "new generated performance with different samples",
         ]
     if bass.get("vary_notes"):
@@ -363,7 +387,9 @@ def _compact_transform_prompt(reference_transform: dict) -> str:
         else:
             controls.append("keep bass rhythm but change notes")
     harmonic = _harmonic_transform(reference_transform)
-    if harmonic.get("strict_scale"):
+    if target_key:
+        controls.append(f"transpose and keep musical pitches inside {target_key} with no clashing off-scale notes")
+    elif harmonic.get("strict_scale"):
         controls.append(f"scale-aware inside {harmonic.get('key')} with no clashing off-scale notes")
     vocal = _vocal_transform(reference_transform)
     if vocal.get("preserve_role"):
@@ -377,7 +403,7 @@ def _compact_transform_prompt(reference_transform: dict) -> str:
     return "control brief: " + "; ".join(controls)
 
 
-def _model_prompt_for_transform(prompt: str, reference_transform: dict) -> str:
+def _model_prompt_for_transform(prompt: str, reference_transform: dict, target_key: str | None = None) -> str:
     base = _sanitize_user_prompt_for_model(prompt)
     style_brief = reference_transform.get("style_brief") or "the reference's detected genre, BPM, key area, groove, mood, and instrumentation"
     try:
@@ -403,26 +429,46 @@ def _model_prompt_for_transform(prompt: str, reference_transform: dict) -> str:
         style_context = "" if _has_explicit_style_direction(base) else f"detected reference style: {style_brief}; "
         bass_context = _bass_lock_direction(reference_transform)
         if similarity < 0.4:
+            key_context = (
+                f"tempo, requested target key area {target_key}, groove attitude, mood"
+                if target_key
+                else "tempo, key area, groove attitude, mood"
+            )
             return (
-                f"{base}; {style_context}use the reference as a producer brief for tempo, key area, groove attitude, mood, "
+                f"{base}; {style_context}use the reference as a producer brief for {key_context}, "
                 f"and broad arrangement roles; {vocal_context}{bass_context}"
                 "change the bassline notes, percussion accents, and sound palette clearly"
             )
+        key_context = (
+            f"same tempo, requested target key area {target_key}, groove pocket, and mood"
+            if target_key
+            else "same tempo, key area, groove pocket, and mood"
+        )
         return (
-            f"{base}; {style_context}keep the same tempo, key area, groove pocket, and mood from the reference; "
+            f"{base}; {style_context}keep the {key_context} from the reference; "
             f"{vocal_context}{bass_context}"
             "make the bass notes and secondary percussion noticeably different"
         )
     if similarity < 0.4:
+        key_context = (
+            f"same tempo, requested target key area {target_key}, groove attitude, mood"
+            if target_key
+            else "same tempo, key area, groove attitude, mood"
+        )
         return (
             f"create a new original track using the reference as a producer brief: {style_brief}; "
-            "keep the same tempo, key area, groove attitude, mood, and broad arrangement roles; "
+            f"keep the {key_context}, and broad arrangement roles; "
             f"{vocal_context}"
             "change the bassline notes, percussion accents, and sound palette clearly while staying musical and tonal"
         )
+    key_context = (
+        f"same tempo, requested target key area {target_key}, groove pocket, and mood"
+        if target_key
+        else "same tempo, key area, groove pocket, and mood"
+    )
     return (
         f"create a reference-inspired original track using this detected style: {style_brief}; "
-        f"keep the same tempo, key area, groove pocket, and mood; {vocal_context}"
+        f"keep the {key_context}; {vocal_context}"
         "make the bass notes and secondary percussion noticeably different"
     )
 
@@ -456,6 +502,13 @@ def _harmonic_transform(reference_transform: dict) -> dict:
 def _harmonic_direction(harmonic: dict) -> str:
     key = harmonic.get("key")
     if harmonic.get("strict_scale") and key:
+        if harmonic.get("target_key_override"):
+            return (
+                f"global harmonic rule: transpose the musical material and keep bassline, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
+                "allow only resolved borrowed or chromatic tones that are musically supported by the requested target key area; "
+                "do not keep the original reference bass roots or chord roots when they conflict with the target key; "
+                "no out-of-tune instruments, clashing off-key notes, random chromatic wrong notes, or unresolved atonal artifacts; "
+            )
         return (
             f"global harmonic rule: keep bassline, hook, synth melody, chord stabs, fills, risers, and effects tuned inside {key}; "
             "allow only resolved borrowed or chromatic tones that are musically supported by the key area; "
@@ -536,7 +589,7 @@ def _has_explicit_style_direction(text: str) -> bool:
     )
 
 
-def _groove_prompt_for_transform(reference_groove: dict, reference_transform: dict) -> str:
+def _groove_prompt_for_transform(reference_groove: dict, reference_transform: dict, target_key: str | None = None) -> str:
     bass = reference_transform.get("bass") or {}
     similarity = float(reference_transform.get("groove_similarity") or 0.0)
     groove_available = reference_groove.get("method") not in (None, "", "unavailable")
@@ -544,8 +597,9 @@ def _groove_prompt_for_transform(reference_groove: dict, reference_transform: di
         return reference_groove.get("prompt") or ""
 
     if similarity < 0.4:
+        key_phrase = f"requested target key area {target_key}" if target_key else "key area"
         grid_intro = (
-            "reference style fingerprint: keep the same BPM, key area, detected genre, "
+            f"reference style fingerprint: keep the same BPM, {key_phrase}, detected genre, "
             "mood, low-end role, swing or timing attitude, and energy; "
             "use the grids as a stylistic pocket reference, not as an exact copy"
         )
@@ -583,7 +637,10 @@ def _groove_prompt_for_transform(reference_groove: dict, reference_transform: di
         parts.append(f"{reference_groove['low_end_weight']} low-end weight")
     if groove_available and reference_groove.get("club_energy"):
         parts.append(f"{reference_groove['club_energy']} underground club energy")
-    parts.append("choose a new bass note sequence in the same key area")
+    if target_key:
+        parts.append(f"choose a new bass note sequence in the requested target key area: {target_key}")
+    else:
+        parts.append("choose a new bass note sequence in the same key area")
     return "; ".join(parts)
 
 
