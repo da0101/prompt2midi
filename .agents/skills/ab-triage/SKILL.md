@@ -85,7 +85,7 @@ Step 4 — Pick the workflow depth from this table:
 | large × * | Full workflow + parallel research subagents + explicit approval |
 | xl × * | Stop. Propose breaking into phases. Do not execute in one pass. |
 
-**New-stream override:** If the task is not already tracked in `ACTIVE.md` and should become a stream, research and human approval are mandatory even when the implementation itself looks small or low-risk.
+**New-stream override:** If the task is not already tracked in `ACTIVE.md` and should become a stream, research, worktree/local-environment prep, and human approval are mandatory even when the implementation itself looks small or low-risk.
 
 ## Output format
 
@@ -102,6 +102,12 @@ One block. Three lines. No preamble. No "let me analyze…". No questions.
 - **Scope mismatch.** User says "quick fix" but you see it touches auth → raise the risk label, tell the user, confirm before proceeding.
 - **Ambiguous target.** User says "fix the bug in checkout" — you don't know which bug. Ask 1 clarifying question before classifying.
 - **Mixed tasks in one request.** User asks for two unrelated things — triage them separately.
+
+## Model profile
+
+**Sonnet** (`claude-sonnet-4-6`) — task triage is analysis, planning, or
+structured writing. This skill is read-heavy; Opus adds no quality benefit
+and costs 5× more per agent call.
 
 ## Integration
 
