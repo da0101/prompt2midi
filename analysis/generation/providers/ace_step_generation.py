@@ -163,8 +163,8 @@ def _build_payload(
 ) -> dict:
     bpm = _bpm(analysis)
     target_key = requested_target_key(prompt)
-    key_scale = _key_scale(analysis, target_key=target_key)
     reconstruction_diagnostic = _reconstruction_diagnostic_enabled()
+    key_scale = "" if reconstruction_diagnostic and not target_key else _key_scale(analysis, target_key=target_key)
     transform = analysis.get("reference_transform") or {}
     requested_similarity = _groove_similarity(transform)
     base_effective_similarity = _effective_similarity(transform, requested_similarity)
@@ -196,7 +196,7 @@ def _build_payload(
     # Sending the same long WAV as both reference_audio and ctx_audio makes
     # /release_task much heavier and can time out before it returns a task id.
     reference_audio_path = None
-    if is_cover and os.environ.get("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE") == "1":
+    if is_cover and (reconstruction_diagnostic or os.environ.get("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE") == "1"):
         reference_audio_path = reference_path
     seed_value = int(os.environ.get("PROMPT2MIDI_ACE_STEP_SEED") or "-1")
     return {
@@ -248,8 +248,8 @@ def _diagnostic_intensity(reference_strength: float, cover_noise_strength: float
 
 
 def _reconstruction_caption(prompt: str, analysis: dict, intensity: float = 1.0) -> str:
-    user = " ".join((prompt or "").replace("\n", " ").split())
-    key = _key_scale(analysis)
+    user = _strip_auto_harmonic_rule(" ".join((prompt or "").replace("\n", " ").split()))
+    target_key = requested_target_key(user)
     if intensity >= 0.92:
         base = (
             "local diagnostic reconstruction: use the source audio as the primary blueprint; "
@@ -272,7 +272,9 @@ def _reconstruction_caption(prompt: str, analysis: dict, intensity: float = 1.0)
         )
     additions = [
         "do not reinterpret the reference as a new style brief",
-        f"keep the same tempo and {key} key area",
+        f"keep the same tempo and requested {target_key} key area"
+        if target_key
+        else "keep the same tempo and source-audio key area; do not rely on generated key analysis",
     ]
     requested_layers = _explicit_layer_requests(user)
     if requested_layers:
@@ -280,6 +282,17 @@ def _reconstruction_caption(prompt: str, analysis: dict, intensity: float = 1.0)
     elif user and user.lower().strip(" .") not in {"same tempo and key area as the reference", "same tempo and key area as the reference."}:
         additions.insert(0, f"requested change: {_sentence_limited(user, 420)}")
     return _sentence_limited(". ".join([base] + additions), 1300)
+
+
+def _strip_auto_harmonic_rule(text: str) -> str:
+    cleaned = re.sub(
+        r"\bglobal harmonic rule:.*?(?:;\.\s*|;\s*|\.\s*)",
+        "",
+        text or "",
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return " ".join(cleaned.split())
 
 
 def _caption(prompt: str, analysis: dict) -> str:
@@ -309,6 +322,8 @@ def _caption(prompt: str, analysis: dict) -> str:
         if user
         else f"original {track_kind} in the detected reference style: {style_brief}"
     )
+    style_lock = _style_lock_text(transform, style_brief)
+    harmony_risk_guard = _harmony_risk_guard_text(transform)
     if direct_vocal:
         end_guard = (
         f"clean club mix, new {vocal.get('role', 'vocal hook')} role with original words and voice, "
@@ -323,12 +338,14 @@ def _caption(prompt: str, analysis: dict) -> str:
         end_guard = "clean club mix, no lead vocal or lyrical singing, no lead solo, no alien glitch sounds"
     additions = [
         style_line,
-        character_guard,
         harmonic_guard,
         f"same tempo as the reference, but use the requested target key area: {target_key}"
         if target_key
         else "same tempo and key area as the reference",
         bass_guard,
+        style_lock,
+        harmony_risk_guard,
+        character_guard,
         "clear bassline groove",
         "tight rhythmic drums",
         "syncopated percussion feel",
@@ -365,6 +382,24 @@ def _caption(prompt: str, analysis: dict) -> str:
 
     caption = ". ".join(priority + additions)
     return _sentence_limited(caption, 1300)
+
+
+def _style_lock_text(transform: dict, style_brief: str) -> str:
+    brief = " ".join(str(style_brief or "").split()).strip(" .;")
+    if not brief:
+        return "detected reference style lock: underground club track"
+    return f"detected reference style lock: {brief}; do not reinterpret it as generic electronic, pop, EDM, trance, or festive music"
+
+
+def _harmony_risk_guard_text(transform: dict) -> str:
+    risks = (((transform or {}).get("ace_preflight") or {}).get("risk_reasons") or [])
+    risk_codes = {str(risk.get("code") or "") for risk in risks if isinstance(risk, dict)}
+    if "dense_harmony" not in risk_codes:
+        return "harmony restraint: avoid bright major-pop chord turns or new sentimental chord progressions unless they are clearly in the reference"
+    return (
+        "harmony restraint: the reference has rich chord movement; keep chord motion dark, sparse, minimal, unresolved only when musically supported, "
+        "and do not invent bright major-pop, holiday, Christmas-like, sentimental, or cheerful chord progressions"
+    )
 
 
 def _drum_priority_text(analysis: dict) -> str:
@@ -724,7 +759,11 @@ def _submit_task(base_url: str, payload: dict) -> str:
     reference_path = payload.pop("reference_audio_path", None)
     src_path = payload.pop("src_audio_path", None)
     files = {}
-    if reference_path and os.path.abspath(reference_path) != os.path.abspath(src_path or ""):
+    duplicate_reference = (
+        os.environ.get("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC") == "1"
+        or os.environ.get("PROMPT2MIDI_ACE_STEP_DUPLICATE_COVER_REFERENCE") == "1"
+    )
+    if reference_path and (duplicate_reference or os.path.abspath(reference_path) != os.path.abspath(src_path or "")):
         files["reference_audio"] = reference_path
     if src_path:
         files["ctx_audio"] = src_path

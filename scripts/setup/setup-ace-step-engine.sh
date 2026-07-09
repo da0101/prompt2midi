@@ -25,6 +25,14 @@ cd "$ACE_ROOT"
 git fetch --depth 1 origin main
 git checkout main
 git pull --ff-only origin main
+
+PATCH="$ROOT/scripts/setup/patches/ace-step-use-mlx-dit-env.patch"
+PATCH_TARGET="$ACE_ROOT/acestep/core/generation/handler/init_service_orchestrator.py"
+if [ -f "$PATCH" ] && ! grep -q "ACESTEP_USE_MLX_DIT" "$PATCH_TARGET"; then
+  git apply "$PATCH"
+  echo "Applied prompt2midi ACE-Step patch: ACESTEP_USE_MLX_DIT env override"
+fi
+
 uv sync --python "$PYTHON"
 
 echo "ACE-Step engine ready at $ACE_ROOT"

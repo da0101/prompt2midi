@@ -285,6 +285,16 @@ def _control_scaffold_direction() -> str:
 
 
 def _condition_prompt(prompt: str, reference_groove: dict, reference_transform: dict | None = None) -> str:
+    if os.environ.get("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC") == "1":
+        user = " ".join((prompt or "").replace("\n", " ").split()).strip()
+        base = (
+            "diagnostic source reconstruction: use the attached source audio as the blueprint; "
+            "match the source timing, groove, arrangement, instruments, bass, drums, effects, timbre, dynamics, and mix character as closely as possible"
+        )
+        if user:
+            base = f"{base}; {user}"
+        return _sentence_limited(base, 900)
+
     parts = []
     bass_lock = _bass_lock_direction(reference_transform or {})
     if bass_lock:
