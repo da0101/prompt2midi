@@ -37,6 +37,10 @@ Start the local ACE-Step API in a separate terminal:
 npm run ace-step:start
 ```
 
+For current reference-calibrated ACE settings, read `docs/pipelines/ace-step-reference-calibration.md` first. The launcher defaults ACE-Step to the PyTorch/MPS DiT backend (`ACESTEP_USE_MLX_DIT=0`) because that is the backend where the calibrated similarity controls behaved correctly.
+
+For exact successful ACE/Suno recipes, use `docs/pipelines/successful-generation-configs.md` as the living config database.
+
 The DrumSep setup installs `.venv-drumsep/bin/prompt2midi-drumsep`. It is optional but useful for percussion reference guides.
 
 ## Generate A Long ACE Proxy
@@ -95,6 +99,8 @@ Audio Influence: 35-45%
 Lyrics Mode: Manual
 Lyrics: [Instrumental]
 ```
+
+When a Suno config works, copy it into `docs/pipelines/successful-generation-configs.md` with the exact prompt and slider values.
 
 If the result gets too EDM/trance/festival:
 

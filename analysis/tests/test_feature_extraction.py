@@ -1495,6 +1495,80 @@ class FeatureExtractionTest(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_reconstruction_diagnostic_strips_auto_key_prompt_and_restores_dual_audio_upload(self):
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC",
+                "PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH",
+                "PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH",
+            )
+        }
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC"] = "1"
+            os.environ["PROMPT2MIDI_ACE_STEP_REFERENCE_STRENGTH"] = "1.0"
+            os.environ["PROMPT2MIDI_ACE_STEP_COVER_NOISE_STRENGTH"] = "1.0"
+            analysis = {
+                "reference_similarity_level": "near-identical",
+                "bpm": 126.0,
+                "key": "C# major",
+                "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+                "vocals": {"present": False},
+            }
+            analysis["reference_transform"] = build_reference_transform("near identical", analysis)
+
+            payload = _build_payload(
+                reference_audio=__file__,
+                prompt=(
+                    "global harmonic rule: keep bassline and effects tuned inside C# major; "
+                    "no out-of-tune instruments;. same tempo and key area as the reference."
+                ),
+                analysis=analysis,
+                duration_seconds=15,
+                candidate_count=1,
+                model="test-model",
+            )
+
+            self.assertTrue(payload["reconstruction_diagnostic"])
+            self.assertEqual(payload["key_scale"], "")
+            self.assertEqual(payload["keyscale"], "")
+            self.assertEqual(payload["reference_audio_path"], os.path.abspath(__file__))
+            self.assertEqual(payload["src_audio_path"], os.path.abspath(__file__))
+            self.assertNotIn("global harmonic rule", payload["prompt"])
+            self.assertNotIn("C# major", payload["prompt"])
+            self.assertIn("source-audio key area", payload["prompt"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_reconstruction_diagnostic_condition_prompt_bypasses_variation_language(self):
+        previous = os.environ.get("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC")
+        try:
+            os.environ["PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC"] = "1"
+            transform = build_reference_transform("near identical", {
+                "bpm": 126.0,
+                "key": "C# major",
+                "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4"], "confidence": 0.7},
+                "vocals": {"present": False},
+            })
+
+            conditioned = _condition_prompt("same tempo and key area as the reference", {}, transform)
+
+            self.assertIn("diagnostic source reconstruction", conditioned)
+            self.assertIn("match the source timing", conditioned)
+            self.assertNotIn("producer-grade original", conditioned)
+            self.assertNotIn("without copying bass pitches", conditioned)
+            self.assertNotIn("different bass", conditioned)
+            self.assertNotIn("new generated performance", conditioned)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC", None)
+            else:
+                os.environ["PROMPT2MIDI_ACE_STEP_RECONSTRUCTION_DIAGNOSTIC"] = previous
+
     def test_cover_payload_uses_single_source_audio_upload_by_default(self):
         previous = {
             key: os.environ.get(key)
@@ -1586,6 +1660,37 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertIn("cowbell percussion layer", caption)
         self.assertIn("short non-lyrical vocal chops", caption)
         self.assertIn("clearly audible", caption)
+
+    def test_ace_caption_preserves_specific_underground_style_lock_with_user_prompt(self):
+        analysis = {
+            "reference_similarity_level": "near-identical",
+            "bpm": 126.05,
+            "key": "E minor",
+            "genre": {"primary": "Electronic (120-135 BPM)", "tags": ["electronic", "4/4", "club"], "confidence": 0.7},
+            "groove": {"feel": "tight"},
+            "vocals": {"present": False},
+        }
+        analysis["reference_transform"] = {
+            "style_brief": (
+                "underground minimal / deep tech house; rolling club groove; tight low-end pressure; "
+                "restrained percussive stabs; around 126 BPM; in the E minor key area"
+            ),
+            "style": {"primary": "underground minimal / deep tech house"},
+            "reference_character": {"prompt": "reference character: dark hypnotic underground pressure and trippy restrained effects"},
+            "harmonic": {"key": "E minor", "strict_scale": True},
+            "ace_preflight": {
+                "risk_reasons": [
+                    {"code": "dense_harmony", "label": "rich chord movement increases off-scale notes", "severity": "medium"}
+                ]
+            },
+        }
+
+        caption = _caption("same tempo and same key area as the reference", analysis)
+
+        self.assertIn("detected reference style lock: underground minimal / deep tech house", caption)
+        self.assertIn("do not reinterpret it as generic electronic", caption)
+        self.assertIn("harmony restraint: the reference has rich chord movement", caption)
+        self.assertIn("do not invent bright major-pop, holiday, Christmas-like", caption)
 
     def test_explicit_added_layers_survive_long_user_prompt(self):
         analysis = {
